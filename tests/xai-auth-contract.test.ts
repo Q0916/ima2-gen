@@ -1,6 +1,6 @@
 /**
  * Contract tests for lib/xaiAuth.ts — the 15 rows of
- * devlog/_plan/260909_grok_native_oauth/010_wp2_xai_auth.md "검증 (C 게이트)".
+ * devlog/_fin/260909_grok_native_oauth/010_wp2_xai_auth.md "검증 (C 게이트)".
  *
  * Runs with no network: every test installs its own globalThis.fetch stub and an isolated
  * HOME created with mkdtempSync, and injects deps.sleep so backoff never costs wall time.

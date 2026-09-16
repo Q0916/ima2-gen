@@ -70,12 +70,33 @@ main과 preview가 이미 움직인 뒤(release.yml:141-146) preview dispatch·�
 3.16.2가 나온다.
 
 이건 release workflow 자체의 성질이고 그 로직 수정은 이 유닛의 범위 밖이다.
-대응은 두 가지다. (1) 이 구간에서 실패하면 자동 재시도하지 않고 상태를 먼저 읽는다 —
-main/preview가 어디 있고 npm preview가 올라갔는지. (2) 버전을 살려야 하면
-`cut`을 다시 돌리지 말고 그 SHA에 대해 태그 생성과 `publish.yml` dispatch를
-수동으로 수행한 뒤 dev를 같은 SHA로 맞춘다. 태그가 이미 밀린 뒤의 실패는
-공백이 아니다 — `publish.yml`을 그 태그/SHA로 재dispatch하면 immutable-version
-가드와 verify-existing 경로가 안전하게 복구한다.
+
+실패하면 자동 재시도하지 않는다. 먼저 상태를 읽는다: `main`/`preview`/`dev`/태그가
+각각 어디 있고, npm `preview`에 해당 버전과 `gitHead`가 올라갔는지.
+
+여기서 단계별 수동 복구 절차를 미리 적지 않는다. 이 문서의 리뷰에서 그 시도가 세 번
+연속 틀렸고(dev 정렬 순서, preview proof의 위치, atomic refspec에서 preview 누락),
+매번 같은 이유였다 — 실행해 보지 않은 경로를 산문으로 재구성하는 중이었다.
+가드는 코드에 있고 코드가 정답이다. 읽어야 할 곳은 세 군데다.
+
+| 무엇 | 어디 |
+|---|---|
+| stable publish가 통과해야 하는 것 | `scripts/release-contract.mjs:409-431` `prepareCommand()` — stable 채널이면 `verifyPreviewProof()`(:376-388)를 부른다. npm preview의 `gitHead`가 그 SHA와 다르거나 버전이 후보가 아니면 publish 자체가 거부된다 |
+| 네 ref가 일치해야 한다는 요구 | 같은 파일의 `validateRemoteRefs()` |
+| cut이 버전을 다시 올리는 지점 | `scripts/release-cut.mjs:169-184` |
+
+따라서 증명되지 않은 stable이 올라갈 위험은 없다. `verifyPreviewProof`가 fail-closed다.
+실제 위험은 다른 것이다 — proof나 ref 불일치를 **태그를 민 뒤에** 발견해서 릴리스가
+어중간하게 멈추는 것. 그래서 복구할 때는 태그를 마지막에 민다.
+
+확인 순서는 두 단계다. 태그를 만들기 전에는 태그가 아직 없으니 태그를 뺀
+`main`·`dev`·`preview` 세 ref가 같은 SHA인지와 preview proof를 확인한다. 태그를 민
+뒤 stable publish를 dispatch하기 전에 네 ref 전부를 다시 확인한다. 확인 시점과 push
+시점 사이에 ref가 움직일 수 있으므로 push 직전에 다시 읽는다
+(`release.yml`의 `assert-remotes-unmoved`가 하는 일이 바로 이것이다).
+
+태그가 이미 밀린 뒤의 실패는 공백이 아니다 — `publish.yml`을 그 태그/SHA로 재dispatch하면
+immutable-version 가드와 verify-existing 경로가 안전하게 복구한다.
 
 승인은 **두 번** 필요하다. 하나는 release.yml의 tag job, 다른 하나는
 publish.yml:272-284의 publish-stable job이다. 둘 다 environment npm-stable을 쓴다.
