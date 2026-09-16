@@ -87,9 +87,13 @@ main과 preview가 이미 움직인 뒤(release.yml:141-146) preview dispatch·�
 
 따라서 증명되지 않은 stable이 올라갈 위험은 없다. `verifyPreviewProof`가 fail-closed다.
 실제 위험은 다른 것이다 — proof나 ref 불일치를 **태그를 민 뒤에** 발견해서 릴리스가
-어중간하게 멈추는 것. 그래서 복구할 때는 태그를 마지막에 민다. 태그 전에 preview proof와
-네 ref 일치를 먼저 확인하고, 확인 시점과 push 시점 사이에 ref가 움직일 수 있으므로
-push 직전에 다시 읽는다(`release.yml`의 `assert-remotes-unmoved`가 하는 일이 바로 이것이다).
+어중간하게 멈추는 것. 그래서 복구할 때는 태그를 마지막에 민다.
+
+확인 순서는 두 단계다. 태그를 만들기 전에는 태그가 아직 없으니 태그를 뺀
+`main`·`dev`·`preview` 세 ref가 같은 SHA인지와 preview proof를 확인한다. 태그를 민
+뒤 stable publish를 dispatch하기 전에 네 ref 전부를 다시 확인한다. 확인 시점과 push
+시점 사이에 ref가 움직일 수 있으므로 push 직전에 다시 읽는다
+(`release.yml`의 `assert-remotes-unmoved`가 하는 일이 바로 이것이다).
 
 태그가 이미 밀린 뒤의 실패는 공백이 아니다 — `publish.yml`을 그 태그/SHA로 재dispatch하면
 immutable-version 가드와 verify-existing 경로가 안전하게 복구한다.
