@@ -71,25 +71,25 @@ main과 preview가 이미 움직인 뒤(release.yml:141-146) preview dispatch·�
 
 이건 release workflow 자체의 성질이고 그 로직 수정은 이 유닛의 범위 밖이다.
 
-실패하면 자동 재시도하지 않는다. 먼저 상태를 읽는다 — `main`/`preview`가 어디 있고
-npm `preview`에 해당 버전이 올라갔는지.
+실패하면 자동 재시도하지 않는다. 먼저 상태를 읽는다: `main`/`preview`/`dev`/태그가
+각각 어디 있고, npm `preview`에 해당 버전과 `gitHead`가 올라갔는지.
 
-버전을 살려야 하면 `cut`을 다시 돌리지 않고 다음 순서를 지킨다. 순서가 중요하다.
+여기서 단계별 수동 복구 절차를 미리 적지 않는다. 이 문서의 리뷰에서 그 시도가 세 번
+연속 틀렸고(dev 정렬 순서, preview proof의 위치, atomic refspec에서 preview 누락),
+매번 같은 이유였다 — 실행해 보지 않은 경로를 산문으로 재구성하는 중이었다.
+가드는 코드에 있고 코드가 정답이다. 읽어야 할 곳은 세 군데다.
 
-1. 같은 SHA로 preview publish를 재dispatch한다:
-   `gh workflow run publish.yml -f publish_ref=refs/heads/preview -f publish_sha=<SHA>`.
-   성공할 때까지 기다린다.
-2. `node scripts/release-cut.mjs assert-preview-proof <version> <SHA>`로 proof를 다시 통과시킨다.
-   이 단계를 건너뛰면 안 된다. `publish.yml`의 stable 경로는 태그와 브랜치 SHA는 검증하지만
-   `assert-preview-proof`를 돌리지 않으므로, 여기서 생략하면 preview 증명 없이 stable이
-   올라간다. `npm-stable` 승인은 남아 있지만 그 승인이 빠진 게이트를 대신해 주지 않는다.
-3. proof가 통과한 뒤에만 태그를 만들고 `main`, `dev`, 태그를 같은 SHA로 **atomic하게** 민다
-   (`git push --atomic`). stable publish를 먼저 dispatch하면 안 된다 —
-   `prepareCommand()`가 stable 태그에 대해 `validateRemoteRefs()`를 부르고
-   `main`·`dev`·`preview`·태그가 이미 일치할 것을 요구하므로, `dev`가 옛 SHA에 남아
-   있으면 publish가 실패하거나 경합한다.
-4. 그 다음에 stable publish를 dispatch한다:
-   `gh workflow run publish.yml -f publish_ref=refs/tags/v<version> -f publish_sha=<SHA>`.
+| 무엇 | 어디 |
+|---|---|
+| stable publish가 통과해야 하는 것 | `scripts/release-contract.mjs:409-431` `prepareCommand()` — stable 채널이면 `verifyPreviewProof()`(:376-388)를 부른다. npm preview의 `gitHead`가 그 SHA와 다르거나 버전이 후보가 아니면 publish 자체가 거부된다 |
+| 네 ref가 일치해야 한다는 요구 | 같은 파일의 `validateRemoteRefs()` |
+| cut이 버전을 다시 올리는 지점 | `scripts/release-cut.mjs:169-184` |
+
+따라서 증명되지 않은 stable이 올라갈 위험은 없다. `verifyPreviewProof`가 fail-closed다.
+실제 위험은 다른 것이다 — proof나 ref 불일치를 **태그를 민 뒤에** 발견해서 릴리스가
+어중간하게 멈추는 것. 그래서 복구할 때는 태그를 마지막에 민다. 태그 전에 preview proof와
+네 ref 일치를 먼저 확인하고, 확인 시점과 push 시점 사이에 ref가 움직일 수 있으므로
+push 직전에 다시 읽는다(`release.yml`의 `assert-remotes-unmoved`가 하는 일이 바로 이것이다).
 
 태그가 이미 밀린 뒤의 실패는 공백이 아니다 — `publish.yml`을 그 태그/SHA로 재dispatch하면
 immutable-version 가드와 verify-existing 경로가 안전하게 복구한다.
