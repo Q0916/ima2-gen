@@ -125,8 +125,10 @@ is empty again; GitHub parity and CI receipts live in the archived closeout.
 | Unit | Status | Open issue |
 |---|---|---|
 | `260917_issue_pr_triage_release/` | Triage of every open issue and PR on 2026-09-17 plus the 3.16.1 cut. Roadmap in 000_plan.md; 010 fixes the grok `--help` defect, 020 gates the dependabot pair, 030 records the PR #229 decision, 050 sequences the release. | #244, #150 |
-| `260909_grok_native_oauth/` | Shipped in v3.16.0 (release commit 7fa7d426). progrok proxy removed; the grok lane calls api.x.ai with the stored xAI OAuth session and `ima2 grok` is native. Receipt: 070_release_v3160.md. | — |
 | `260902_studio_surfaces/` | NovelAI dual-prompt UI, configurable Prompt Builder backend, Canvas vectorize entry, docs upgrade, and release train. | — |
+
+`260909_grok_native_oauth/` shipped in v3.16.0 and moved to `_fin/` on 2026-09-17;
+its receipt is `devlog/_fin/260909_grok_native_oauth/070_release_v3160.md`.
 
 Open issue #150 (Provider Adapter v1 RFC) is tracked in `_plan/README.md` but
 has no owning devlog unit yet — its scope is architectural and cross-cutting.
