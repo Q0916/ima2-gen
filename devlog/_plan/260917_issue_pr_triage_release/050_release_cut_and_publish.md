@@ -58,8 +58,24 @@ npm-stable 게이트는 그 다음 tag job(release.yml:174-188) 앞에 있다.
 복구는 **같은 SHA로 tag job을 재실행하고 승인**하는 것이다. 태그만 손으로 미는
 우회는 쓰지 않는다 — publish.yml이 v* 태그 push를 받아 stable을 올리기는 하지만
 dev가 새 SHA로 따라오지 않아 "네 ref가 한 SHA" 조건을 채우지 못한다.
-main/dev/태그를 atomic으로 맞추는 것은 tag job의 push뿐이다(release.yml:183-188).
+main/dev/태그를 atomic으로 맞추는 것은 tag job의 push뿐이다(release.yml:210-221).
 히스토리는 되감지 않는다.
+
+### 알려진 복구 공백 (A-phase에서 확인)
+
+main과 preview가 이미 움직인 뒤(release.yml:141-146) preview dispatch·대기·proof
+단계에서 실패하면 같은 버전으로 되돌릴 방법이 workflow 안에 없다. `tag` job은
+`needs: cut`(release.yml:176) 때문에 건너뛰어지고, `cut`을 재실행하면
+`scripts/release-cut.mjs:169-184`가 또 한 번 patch bump를 해서 3.16.1이 아니라
+3.16.2가 나온다.
+
+이건 release workflow 자체의 성질이고 그 로직 수정은 이 유닛의 범위 밖이다.
+대응은 두 가지다. (1) 이 구간에서 실패하면 자동 재시도하지 않고 상태를 먼저 읽는다 —
+main/preview가 어디 있고 npm preview가 올라갔는지. (2) 버전을 살려야 하면
+`cut`을 다시 돌리지 말고 그 SHA에 대해 태그 생성과 `publish.yml` dispatch를
+수동으로 수행한 뒤 dev를 같은 SHA로 맞춘다. 태그가 이미 밀린 뒤의 실패는
+공백이 아니다 — `publish.yml`을 그 태그/SHA로 재dispatch하면 immutable-version
+가드와 verify-existing 경로가 안전하게 복구한다.
 
 승인은 **두 번** 필요하다. 하나는 release.yml의 tag job, 다른 하나는
 publish.yml:272-284의 publish-stable job이다. 둘 다 environment npm-stable을 쓴다.
@@ -89,6 +105,11 @@ ref와 dist-tag만으로는 "그 SHA가 실제로 퍼블리시됐다"를 증명�
     gh run list --workflow release.yml --limit 1
     gh run list --workflow publish.yml --limit 2
     gh release view v3.16.1 --json tagName,createdAt
+
+`--limit` 목록은 어떤 run이 이 릴리스의 것인지 식별하지 못한다. dispatch 직후
+release.yml run id를 받아 적고, 그 run의 로그에서 `wait-publish-run.mjs`가 고른
+preview/stable publish run id 2개를 꺼내, 세 id를 SHA·버전과 함께 기록한 뒤
+`gh run view <id>`로 그 run들을 직접 본다. 최신 목록에 의존하지 않는다.
 
 통과 조건: 네 ref가 한 SHA이고(태그 SHA는 `git ls-remote origin refs/tags/v3.16.1`로
 확인한다), npm `gitHead`가 그 SHA와 같고, latest가 3.16.1, preview가 같은 SHA에서 나온

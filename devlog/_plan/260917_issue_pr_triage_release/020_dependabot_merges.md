@@ -78,3 +78,23 @@ breaking 고지는 없다. ima2가 실제로 부르는 표면은 `login`, `login
 (package-install smoke 포함)를 돌리고 (`.github/workflows/release.yml:89-96`,
 `package.json:41-42`), 그 후 후보 SHA를 다시 full CI 게이트에 태운다
 (`.github/workflows/release.yml:97-129`).
+
+## 실행 결과 (2026-09-17)
+
+계획대로 진행됐고 예측도 맞았다. wp1의 #245가 머지되어 `main`이 `79a6fd7b`로
+올라가자 두 PR은 즉시 `ahead=1 behind=5 status=diverged`가 됐다.
+
+| 단계 | 결과 |
+|---|---|
+| `gh pr update-branch 242` | head `1cce12ec` → `7e6edcc5` |
+| #242 체크 | 9개 전부 green. frontend E2E가 약 18분으로 가장 오래 걸렸다 — Playwright 1.63 Chromium 재설치 때문 |
+| #242 머지 | `main` = `12d79185` |
+| `gh pr update-branch 243` | head `237754c5` → `d36556d6` |
+| #243 PR 체크 | CLEAN |
+| full `ci.yml` dispatch | run `35136821075`, `--ref`는 같은 저장소의 head 브랜치, `-f sha=d36556d6` |
+| full CI 결과 | 6잡 전부 success: ubuntu node 22.23.0 / 24.17.0, windows node 22.23.0 / 24.17.0, macOS native installation, frontend e2e |
+| #243 머지 | `--match-head-commit d36556d6`로 머지, `main` = `22e7c1ab` |
+
+HOLD 판정의 근거였던 package-install smoke는 dispatch한 full CI의 ubuntu·windows·macOS
+잡에서 실제로 돌았고 전부 통과했다. 즉 보류는 형식이 아니라 실제로 커버리지를
+메웠다. 머지 후 열린 PR은 #229 하나만 남았다.
