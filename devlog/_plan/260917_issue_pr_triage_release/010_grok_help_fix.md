@@ -50,10 +50,27 @@ argv를 그대로 넘긴다 (`bin/ima2.ts:443-450`, `bin/ima2.ts:529-535`). `gro
 
 ## 변경 (MODIFY `bin/commands/grok.ts`)
 
+A-phase 정정: 하나의 `SPEC`을 세 서브커맨드가 공유하면 `grok login --json`처럼
+무관한 플래그가 조용히 통과한다. `video`는 서브커맨드별 spec을 쓰고
+`rejectUnknownFlags`(`bin/commands/video.ts:56-58`)로 `_unknown`을 거부한다
+(`bin/commands/video.ts:257-262`). 같은 형태를 따르되 **순서는 일부러 다르게 간다.**
+`video edit`은 `rejectUnknownFlags`를 `args.help`보다 먼저 호출해서
+`video edit --help --bogus`가 도움말 대신 exit 2를 낸다(`bin/commands/video.ts:259-265`).
+#244의 요지는 "`--help`는 부작용 없이 도움말을 낸다"이므로 grok에서는 help를 먼저
+반환하고 `_unknown` 거부를 그 뒤에 둔다. 이 차이는 의도된 것이다.
+`rejectUnknownFlags`는 `video.ts` 지역 함수이고 공용 헬퍼가 없으므로, grok에도 같은
+두 줄짜리 지역 함수를 둔다. 공용 모듈 승격은 이 이슈 범위 밖이다.
+
+- `HELP_ONLY_SPEC` = `{ flags: { help: { short: "h", type: "boolean" } } }` — login/logout용
+- `STATUS_SPEC` = 기존 `SPEC` (json, probe, help) — status용
+- help 반환 직후 `args._unknown`이 비어 있지 않으면 `die(2, ...)`. 좁은 spec만으로는
+  미지원 플래그가 여전히 무시된다(`bin/lib/args.ts:51`, `:71`).
+
 1. `HELP` 아래에 `LOGIN_HELP`, `STATUS_HELP`, `LOGOUT_HELP` 템플릿 리터럴 3개 추가.
    기존 `HELP`와 같은 2칸 들여쓰기, 같은 톤.
 2. `loginCmd()` → `loginCmd(argv: string[])`. 첫 줄에서
-   `const args = parseArgs(argv, SPEC); if (args.help) { out(LOGIN_HELP); return; }`.
+   `const args = parseArgs(argv, HELP_ONLY_SPEC); if (args.help) { out(LOGIN_HELP); return; }`,
+   이어서 `_unknown` 거부.
    서버 탐색(`findRunningServer`)보다 앞에 둔다.
 3. `statusCmd(argv)`의 `parseArgs` 직후, `loadGrokCredentials()` 앞에 동일한 help 분기.
 4. 인라인이던 logout 블록을 `logoutCmd(argv: string[]): void`로 추출하고,
@@ -98,9 +115,35 @@ after:
 
 | 케이스 | 단언 |
 |---|---|
-| `grok login --help` | exit 0, stdout에 `ima2 grok login`, device-code 문구(`enter the code`) 없음, `auth.json` 바이트 동일 |
+| `grok login --help` | exit 0, stdout에 `ima2 grok login`, trap 서버 요청 수 0, `auth.json` 바이트 동일 |
 | `grok logout --help` | exit 0, stdout에 `ima2 grok logout`, `auth.json` 바이트 동일 (핵심 회귀) |
 | `grok status -h` | exit 0, stdout에 `ima2 grok status`, 세션 상태 문구(`expires:`) 없음 |
+
+### HOME 격리만으로는 부족하다 (A-phase 블로커)
+
+`HOME` 격리는 CLI가 직접 읽는 자격증명만 막는다. `loginCmd`가 부르는
+`findRunningServer({ includeEnv: false })`는 advertise 파일이 없어도
+`http://localhost:3333`을 무조건 후보에 넣는다(`bin/lib/client.ts:155`, `:163`).
+회귀 상태에서 실제 `ima2 serve`가 떠 있으면 CLI가 그 서버에 `/api/auth/switch`를
+보내고(`bin/commands/grok.ts:99`), 서버는 자기 홈에 자격증명을 저장한다
+(`routes/auth.ts:65`, `:73`, `:105`). 격리된 sentinel은 그 변경을 보지 못한다.
+**이 머신에서 지금 127.0.0.1:3333에 실제 서버가 떠 있다(확인함).** 가설이 아니다.
+
+따라서 테스트는 `IMA2_ADVERTISE_FILE`을 명시적으로 세팅해 테스트 소유 loopback
+trap 서버를 가리킨다. trap은 `/api/health`에 200과 **유효한 JSON 본문**(`{"ok":true}`)을
+주어 탐색이 거기서 멈추게 하고, 모든 요청을 센다. JSON이 아니면 `probe`가
+`SERVER_INVALID_HEALTH`로 던져(`bin/lib/client.ts:142-146`) 탐색 경로가 달라진다.
+단언은 "요청 수 0". 가드가 회귀하면 탐색이 trap에서 끝나므로 실제 서버에도
+xAI에도 닿지 않는다.
+
+`IMA2_ADVERTISE_FILE`을 명시적으로 주는 것이 필수다. 이 변수는 상속되면
+`IMA2_CONFIG_DIR`을 덮어쓴다(`bin/lib/client.ts:112`). 탐색을 완전히 끄는 환경변수는
+없다 — `IMA2_SERVER`는 `includeEnv: false`라 무시되고 `IMA2_PORT`는 `DEFAULT_PORT`를
+바꾸지 않는다.
+
+sentinel `auth.json`은 `accessToken`을 가진 유효한 JSON이어야 한다. 그러지 않으면
+status red 케이스가 "not logged in"을 찍어 저장된 세션 출력 경로를 타지 않는다
+(`lib/xaiAuth.ts:128-132`). 임시 디렉터리 정리는 `finally`에 둔다.
 
 `runCLI` (`tests/cli-help-safety-contract.test.js:8-18`)에는 타임아웃이 없다. 가드가
 회귀하면 `login`이 3초 간격 폴링에 들어가 테스트가 실패하는 대신 30분간 매달린다.
@@ -120,7 +163,17 @@ npm run typecheck
 npm run typecheck:tests
 node --test tests/cli-help-safety-contract.test.js
 npm run test:inventory
+npm run docs:refresh-line-counts
+node scripts/refresh-structure-line-counts.mjs --check
 ```
+
+마지막 두 줄이 A-phase에서 추가됐다. `structure/01-file-function-map.md:137`에
+`bin/commands/grok.ts` 줄 수 행이 있고(`bin/commands/*`가 갱신 대상,
+`scripts/refresh-structure-line-counts.mjs:15`), CI가 drift를 거부한다
+(`.github/workflows/ci.yml:57`). 이 파일을 커밋에 포함하지 않으면 릴리스 후보 CI가 떨어진다.
+
+테스트 파일은 이미 인벤토리에 있고(`docs/migration/runtime-test-inventory.md:309`)
+contract 분류가 유지되므로 인벤토리 재생성은 필요 없다. 그래도 `--check`로 확인한다.
 
 추가로 실제 홈을 건드리지 않는 수동 증거: 격리 HOME에서
 `node --import tsx bin/ima2.ts grok logout --help` 실행 후 seeded `auth.json` mtime 불변.
@@ -132,5 +185,6 @@ npm run test:inventory
 
 브랜치 `codex/issue244-grok-subcommand-help`, base `main`. PR 본문에 `Closes #244`.
 이 PR이 함께 싣는 것: 이 devlog 유닛(`git add -f`), `CHANGELOG.md`의 `3.16.1` 항목,
+`structure/01-file-function-map.md`의 `bin/commands/grok.ts` 줄 수 갱신,
 `structure/07-devlog-map.md`와 `devlog/_plan/README.md`의 Active units 갱신.
 체크 green 후 머지.

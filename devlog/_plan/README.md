@@ -24,6 +24,7 @@ Deferred / 미래 항목은 `_plan/` 직속이 아니라 `_plan/_future/`에 둔
 
 | 경로 | 상태 |
 |---|---|
+| `260917_issue_pr_triage_release/` | 2026-09-17 기준 열린 이슈/PR 전수 정리와 v3.16.1 릴리스. 이슈 #244(grok 서브커맨드 `--help` 부작용) 수정, dependabot #242/#243 판정, PR #229 판정, #150 재triage. 진행 문서는 000~050. |
 | `260908_xai_imagine_spec_resync/` | v3.15.1로 배포 완료. xAI ref2v 상한 7->14, 모델별 ref2v 길이, 연장 1-15s, 이미지 편집 5장, 날짜 별칭, 오디오 단독 ref2v를 서버·UI·CLI·문서에 반영. GUI에 보이스 선택과 영상 편집 버튼 추가. 남은 것: 컴포저 드롭에서 편집으로 들어가는 흐름(결과 카드로 대체 가능). 배포 기록은 070_release_v3151.md. |
 | `260909_grok_native_oauth/` | v3.16.0으로 배포 완료. PR #233~#237 스택이 dev에 머지되고 #238/#240으로 main 승격, 릴리스 커밋 7fa7d426. progrok 프록시 제거, grok 레인이 xAI OAuth 세션으로 api.x.ai 직접 호출, `ima2 grok login/status/logout` 네이티브. 영수증은 070_release_v3160.md. |
 
