@@ -37,13 +37,57 @@ const HELP = `
     CLI and the web UI share one login; otherwise it runs the flow directly.
 `;
 
-const SPEC = {
+const LOGIN_HELP = `
+  ima2 grok login
+
+  Log in to xAI with the OAuth device-code flow. Prints a verification URL and a
+  user code, then waits for the approval. Uses a running 'ima2 serve' when one
+  answers so the CLI and the web UI share a single session.
+
+  Options:
+    -h, --help             Show this help
+`;
+
+const STATUS_HELP = `
+  ima2 grok status [--json] [--probe]
+
+  Show the stored xAI OAuth session: account, expiry, and whether a refresh
+  token is present.
+
+  Options:
+        --json             Print the status as one JSON object
+        --probe            Call /v1/models and list the visible grok-imagine models
+    -h, --help             Show this help
+`;
+
+const LOGOUT_HELP = `
+  ima2 grok logout
+
+  Remove the stored xAI OAuth session from ~/.progrok/auth.json. The progrok CLI
+  shares that file, so this logs both out.
+
+  Options:
+    -h, --help             Show this help
+`;
+
+/** login and logout take no options of their own; only help is valid. */
+const HELP_ONLY_SPEC = {
+  flags: {
+    help: { short: "h", type: "boolean" },
+  },
+};
+
+const STATUS_SPEC = {
   flags: {
     json: { type: "boolean" },
     probe: { type: "boolean" },
     help: { short: "h", type: "boolean" },
   },
 };
+
+function rejectUnknownFlags(args: { _unknown?: string[] }): void {
+  if (args._unknown?.length) die(2, `unknown option: ${args._unknown[0]}`);
+}
 
 const POLL_INTERVAL_MS = 3_000;
 
@@ -110,7 +154,13 @@ async function loginViaServer(base: string): Promise<void> {
   throw new Error("xAI device login expired before it was approved");
 }
 
-async function loginCmd(): Promise<void> {
+async function loginCmd(argv: string[]): Promise<void> {
+  // Help is answered before anything observable happens. Until 3.16.1 this
+  // function started server discovery and a real device-code flow for
+  // 'ima2 grok login --help' (#244).
+  const args = parseArgs(argv, HELP_ONLY_SPEC);
+  if (args.help) { out(LOGIN_HELP); return; }
+  rejectUnknownFlags(args);
   let server: { base: string } | null = null;
   try {
     server = await findRunningServer({ includeEnv: false });
@@ -154,7 +204,9 @@ async function probeResult(): Promise<GrokProbeJson> {
 }
 
 async function statusCmd(argv: string[]): Promise<void> {
-  const args = parseArgs(argv, SPEC);
+  const args = parseArgs(argv, STATUS_SPEC);
+  if (args.help) { out(STATUS_HELP); return; }
+  rejectUnknownFlags(args);
   const creds = loadGrokCredentials();
   const probe = args.probe === true && creds !== null ? await probeResult() : undefined;
   if (args.json) {
@@ -175,6 +227,16 @@ async function statusCmd(argv: string[]): Promise<void> {
   out(ids.length ? `  imagine models: ${ids.join(", ")}` : color.yellow("  no grok-imagine model is visible to this session"));
 }
 
+function logoutCmd(argv: string[]): void {
+  // Same reason as loginCmd: 'ima2 grok logout --help' used to delete the
+  // stored session before anyone read the help text (#244).
+  const args = parseArgs(argv, HELP_ONLY_SPEC);
+  if (args.help) { out(LOGOUT_HELP); return; }
+  rejectUnknownFlags(args);
+  clearGrokCredentials();
+  out(color.green("✓ ") + "Removed the stored Grok OAuth session");
+}
+
 export default async function grokCmd(argv: string[]) {
   const sub = argv[0];
   if (!sub || sub === "--help" || sub === "-h") {
@@ -182,12 +244,8 @@ export default async function grokCmd(argv: string[]) {
     return;
   }
   const rest = argv.slice(1);
-  if (sub === "login") return loginCmd();
+  if (sub === "login") return loginCmd(rest);
   if (sub === "status") return statusCmd(rest);
-  if (sub === "logout") {
-    clearGrokCredentials();
-    out(color.green("✓ ") + "Removed the stored Grok OAuth session");
-    return;
-  }
+  if (sub === "logout") return logoutCmd(rest);
   die(2, `unknown subcommand '${sub}'. Run 'ima2 grok --help'.`);
 }
