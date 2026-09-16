@@ -134,7 +134,7 @@ routes/
 | `bin/commands/config.ts` | 194 | CLI config get/set client |
 | `bin/commands/observability.ts` | 177 | Shared CLI handler for `storage`, `billing`, `providers`, `oauth`, and `inflight` aliases (`ima2.ts` routes those commands here) |
 | `bin/commands/doctor.ts` | 310 | CLI diagnostics: storage, OAuth, providers, image probe |
-| `bin/commands/grok.ts` | 194 | Grok OAuth login and status helpers |
+| `bin/commands/grok.ts` | 252 | Grok OAuth login and status helpers |
 | `bin/commands/defaults.ts` | 270 | CLI default provider/model/size/reasoning-effort get/set |
 | `bin/commands/capabilities.ts` | 143 | CLI wrapper for `GET /api/capabilities` |
 | `bin/commands/skill.ts` | 402 | CLI packaged-skill reader: `skill [ls|<name>] [path] [--json]` over KNOWN_SKILLS (ima2/front/uiux) |

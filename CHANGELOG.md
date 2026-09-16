@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Windows installer npm handling** — compose global npm lockfile path with nested `Join-Path` calls for PowerShell 5.1 compatibility; wrap npm invocations in `Invoke-Npm` with `Continue` error action preference so stderr warnings do not abort the installer (#110, #111).
 
+## [3.16.1] - 2026-09-17
+
+### Fixed
+
+- **`ima2 grok` subcommands ignored `--help`** (#244) — `grok login`, `grok status`, and `grok logout` were dispatched before their arguments were parsed, so `ima2 grok login --help` started a real xAI device-code flow and sat polling instead of printing anything, and `ima2 grok logout --help` deleted `~/.progrok/auth.json` before any help text appeared. Each subcommand now answers `--help`/`-h` with its own usage before doing anything observable, and rejects options it does not accept.
+
+### Changed
+
+- **Dependencies** — `@openai/codex` 0.153.2 to 0.153.4; the UI development group moves `@playwright/test` 1.62.1 to 1.63.0 and `@types/react-dom` 19.2.5 to 19.2.7.
+
 ## [3.16.0] - 2026-09-09
 
 ### Removed
