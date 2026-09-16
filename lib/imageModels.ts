@@ -8,6 +8,25 @@ const FALLBACK_REASONING_EFFORT = "none";
 const VALID_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
 export const GROK_FALLBACK_IMAGE_MODEL = "grok-imagine-image-2.0";
+
+/**
+ * Models that reject `reasoning.effort: "none"` upstream.
+ *
+ * GPT-6 Astra accepts low/medium/high/xhigh/max but not "none", while this app's
+ * own default effort is "none". Without a coercion here, simply selecting Astra
+ * in the UI would fail the request before an image is ever generated. OpenAI's
+ * migration guidance names "low" as the replacement for "none"/"minimal", so
+ * that is what a "none" request becomes for these models. Every other model is
+ * untouched, and an explicit effort is never downgraded.
+ */
+const MODELS_WITHOUT_NONE_EFFORT = new Set(["gpt-6-astra"]);
+
+/** Coerce only the unsupported pairing; any other model/effort passes through. */
+export function coerceReasoningEffortForModel(model: string | undefined, effort: string | undefined): string | undefined {
+  if (effort !== "none" || model === undefined) return effort;
+  return MODELS_WITHOUT_NONE_EFFORT.has(model) ? "low" : effort;
+}
+
 // xAI's current flagship Imagine image model. The legacy "quality" knob used to
 // swap in grok-imagine-image-quality; 2.0 supersedes it for high-quality work,
 // so the knob now resolves here. An explicit user selection is never downgraded.

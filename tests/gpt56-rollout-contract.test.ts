@@ -5,7 +5,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { normalizeImageModel, normalizeReasoningEffort } from "../lib/imageModels.ts";
+import { coerceReasoningEffortForModel, normalizeImageModel, normalizeReasoningEffort } from "../lib/imageModels.ts";
+import { resolveProviderOptions } from "../lib/providerOptions.ts";
 import { config } from "../config.ts";
 
 const GPT56_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
@@ -91,6 +92,29 @@ describe("gpt-6 astra: additive registration", () => {
     assert.equal(config.apiProvider.defaultReasoningEffort, "low");
     assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.6-luna" });
     assert.equal(readSource("ui/src/lib/reasoning.ts").match(/DEFAULT_REASONING_EFFORT: ReasoningEffort = "(\w+)"/)?.[1], "none");
+  });
+
+  // Astra accepts low/medium/high/xhigh/max but not "none", and "none" is this
+  // app's own UI default. Selecting Astra therefore has to coerce rather than
+  // forward, or the request fails upstream before any image exists.
+  it("coerces only the effort Astra cannot accept, and only for Astra", () => {
+    assert.equal(coerceReasoningEffortForModel(ASTRA, "none"), "low");
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+      assert.equal(coerceReasoningEffortForModel(ASTRA, effort), effort, `${effort} must pass through untouched`);
+    }
+    for (const model of [...GPT56_MODELS, "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]) {
+      assert.equal(coerceReasoningEffortForModel(model, "none"), "none", `${model} must keep none`);
+    }
+    assert.equal(coerceReasoningEffortForModel(undefined, "none"), "none");
+  });
+
+  it("does not let the app's default effort reach Astra unchanged", () => {
+    const uiDefault = readSource("ui/src/lib/reasoning.ts").match(/DEFAULT_REASONING_EFFORT: ReasoningEffort = "(\w+)"/)?.[1];
+    const resolved = resolveProviderOptions(null, { provider: "oauth", rawModel: ASTRA, rawReasoningEffort: uiDefault });
+    assert.equal(resolved.error, undefined);
+    assert.equal(resolved.model, ASTRA);
+    assert.notEqual(resolved.reasoningEffort, "none");
+    assert.equal(resolved.reasoningEffort, "low");
   });
 });
 
