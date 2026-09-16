@@ -70,12 +70,29 @@ main과 preview가 이미 움직인 뒤(release.yml:141-146) preview dispatch·�
 3.16.2가 나온다.
 
 이건 release workflow 자체의 성질이고 그 로직 수정은 이 유닛의 범위 밖이다.
-대응은 두 가지다. (1) 이 구간에서 실패하면 자동 재시도하지 않고 상태를 먼저 읽는다 —
-main/preview가 어디 있고 npm preview가 올라갔는지. (2) 버전을 살려야 하면
-`cut`을 다시 돌리지 말고 그 SHA에 대해 태그 생성과 `publish.yml` dispatch를
-수동으로 수행한 뒤 dev를 같은 SHA로 맞춘다. 태그가 이미 밀린 뒤의 실패는
-공백이 아니다 — `publish.yml`을 그 태그/SHA로 재dispatch하면 immutable-version
-가드와 verify-existing 경로가 안전하게 복구한다.
+
+실패하면 자동 재시도하지 않는다. 먼저 상태를 읽는다 — `main`/`preview`가 어디 있고
+npm `preview`에 해당 버전이 올라갔는지.
+
+버전을 살려야 하면 `cut`을 다시 돌리지 않고 다음 순서를 지킨다. 순서가 중요하다.
+
+1. 같은 SHA로 preview publish를 재dispatch한다:
+   `gh workflow run publish.yml -f publish_ref=refs/heads/preview -f publish_sha=<SHA>`.
+   성공할 때까지 기다린다.
+2. `node scripts/release-cut.mjs assert-preview-proof <version> <SHA>`로 proof를 다시 통과시킨다.
+   이 단계를 건너뛰면 안 된다. `publish.yml`의 stable 경로는 태그와 브랜치 SHA는 검증하지만
+   `assert-preview-proof`를 돌리지 않으므로, 여기서 생략하면 preview 증명 없이 stable이
+   올라간다. `npm-stable` 승인은 남아 있지만 그 승인이 빠진 게이트를 대신해 주지 않는다.
+3. proof가 통과한 뒤에만 태그를 만들고 `main`, `dev`, 태그를 같은 SHA로 **atomic하게** 민다
+   (`git push --atomic`). stable publish를 먼저 dispatch하면 안 된다 —
+   `prepareCommand()`가 stable 태그에 대해 `validateRemoteRefs()`를 부르고
+   `main`·`dev`·`preview`·태그가 이미 일치할 것을 요구하므로, `dev`가 옛 SHA에 남아
+   있으면 publish가 실패하거나 경합한다.
+4. 그 다음에 stable publish를 dispatch한다:
+   `gh workflow run publish.yml -f publish_ref=refs/tags/v<version> -f publish_sha=<SHA>`.
+
+태그가 이미 밀린 뒤의 실패는 공백이 아니다 — `publish.yml`을 그 태그/SHA로 재dispatch하면
+immutable-version 가드와 verify-existing 경로가 안전하게 복구한다.
 
 승인은 **두 번** 필요하다. 하나는 release.yml의 tag job, 다른 하나는
 publish.yml:272-284의 publish-stable job이다. 둘 다 environment npm-stable을 쓴다.

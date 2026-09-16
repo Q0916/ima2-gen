@@ -2,7 +2,7 @@
  * xAI (Grok) OAuth credential store and refresh client.
  *
  * Ported from OpenCodex `src/oauth/xai.ts` (refresh path only) with the D1-D6/D9 fixes
- * recorded in devlog/_plan/260909_grok_native_oauth/001_opencodex_port_spec.md.
+ * recorded in devlog/_fin/260909_grok_native_oauth/001_opencodex_port_spec.md.
  *
  * MUST stay a leaf module: only node:fs, node:crypto, node:os, node:path. No imports from
  * config, routes, adapters, or the logger — adapters call loadGrokCredentials() synchronously.
