@@ -181,6 +181,7 @@ Grok影片產生預設為規範`grok-imagine-video-1.5`; `grok-imagine-video`仍
 該應用程式預設為**`gpt-5.6-luna`**用於影像生成和 Prompt Builder 規劃。較舊的受支援型號仍保留明確的兼容性選擇。
 
 - `gpt-5.6-luna`— 目前影像和提示產生器預設值。
+- `gpt-6-astra`— 最新的 GPT 影像模型；可選，但不是預設值。
 - `gpt-5.6-terra` / `gpt-5.6-sol`- 目前的GPT-5.6當您的帳戶暴露它們時的替代方案。
 - `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`- 支援的相容性選擇。
 

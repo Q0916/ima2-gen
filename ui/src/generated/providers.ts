@@ -30,6 +30,7 @@ export const PROVIDER_MODELS = {
       "gpt-5.6-sol",
       "gpt-5.6-terra",
       "gpt-5.6-luna",
+      "gpt-6-astra",
       "gpt-5.3-codex-spark"
     ],
     "video": []
@@ -41,7 +42,8 @@ export const PROVIDER_MODELS = {
       "gpt-5.4-mini",
       "gpt-5.6-sol",
       "gpt-5.6-terra",
-      "gpt-5.6-luna"
+      "gpt-5.6-luna",
+      "gpt-6-astra"
     ],
     "video": []
   },
@@ -120,6 +122,7 @@ export const IMAGE_MODEL_IDS = [
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
+  "gpt-6-astra",
   "grok-imagine-image-2.0",
   "grok-imagine-image",
   "grok-imagine-image-quality",

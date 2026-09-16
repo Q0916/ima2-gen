@@ -137,6 +137,7 @@ Use the **Switch Account** button in Settings > QuotaCard for the provider. This
 The app starts with `gpt-5.6-luna`; choose another model only when you need an explicit compatibility or account-specific override.
 
 - `gpt-5.6-luna`: current app default.
+- `gpt-6-astra`: newest GPT image model; selectable, not the default.
 - `gpt-5.6-sol` / `gpt-5.6-terra`: current GPT-5.6 alternatives;
   availability depends on your OAuth account access, so upstream may reject them
   until the rollout reaches you.

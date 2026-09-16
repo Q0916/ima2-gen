@@ -131,6 +131,7 @@ Grok 動画の既定値は正式名 `grok-imagine-video-1.5` です。`grok-imag
 画像生成と Prompt Builder の既定値は **`gpt-5.6-luna`** です。旧モデルは互換オプションとして残ります。
 
 - `gpt-5.6-luna` — 現在の画像・Prompt Builder 既定値。
+- `gpt-6-astra` — 最新の GPT 画像モデル。選択できますが既定値ではありません。
 - `gpt-5.6-terra` / `gpt-5.6-sol` — アカウントで利用できる GPT-5.6 オプション。
 - `gpt-5.5` / `gpt-5.4` / `gpt-5.4-mini` — 互換オプション。
 

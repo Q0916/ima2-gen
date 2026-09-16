@@ -70,7 +70,7 @@ export function normalizeImageModel(ctx: RouteRuntimeContext | null | undefined,
 
   if (!valid.has(rawModel)) {
     return {
-      error: "model must be one of: gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna",
+      error: "model must be one of: gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-6-astra",
       code: "INVALID_IMAGE_MODEL",
       status: 400,
     };

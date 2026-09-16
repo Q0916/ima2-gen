@@ -25,7 +25,7 @@ const ready = (models: Partial<LaneInfo["models"]> = {}, defaults: LaneInfo["def
 function makeCatalog(): ModelCatalog {
   return {
     lanes: {
-      oauth: ready({ image: [{ id: "gpt-5.6-luna" }, { id: "shared" }] }, { image: "gpt-5.6-luna" }),
+      oauth: ready({ image: [{ id: "gpt-5.6-luna" }, { id: "gpt-6-astra" }, { id: "shared" }] }, { image: "gpt-5.6-luna" }),
       api: ready({ image: [{ id: "shared" }] }, { image: "shared" }),
       grok: ready({ video: [{ id: "grok-video" }] }, { video: "grok-video" }),
       "grok-api": ready(),
@@ -74,6 +74,18 @@ describe("resolveTarget", () => {
     });
     assert.deepStrictEqual(resolveTarget("video", { model: "runway/veo-3.1" }, makeCatalog(), {}), {
       ok: true, lane: "runway", model: "veo-3.1", transport: "mcp",
+    });
+  });
+
+  // The CLI alias map in bin/lib/model-aliases.ts is maintained separately from
+  // the registry's aliases field, which never reaches the resolver. This is the
+  // only place that proves a short alias actually resolves for a user.
+  it("resolves the astra alias both namespaced and bare", () => {
+    assert.deepStrictEqual(resolveTarget("image", { model: "oauth/astra" }, makeCatalog(), {}), {
+      ok: true, lane: "oauth", model: "gpt-6-astra", transport: "core",
+    });
+    assert.deepStrictEqual(resolveTarget("image", { model: "astra" }, makeCatalog(), {}), {
+      ok: true, lane: "oauth", model: "gpt-6-astra", transport: "core",
     });
   });
 
@@ -141,7 +153,7 @@ describe("resolveTarget", () => {
   it("returns grouped models and two fix commands when the CLI default is absent", () => {
     const failure = expectFailure(resolveTarget("image", {}, makeCatalog(), {}), "NO_DEFAULT_MODEL");
     const models = failure!.extra?.models as Record<string, string[]>;
-    assert.deepStrictEqual(models.oauth, ["gpt-5.6-luna", "shared"]);
+    assert.deepStrictEqual(models.oauth, ["gpt-5.6-luna", "gpt-6-astra", "shared"]);
     assert.deepStrictEqual(models.runway, ["gen-4"]);
     assert.deepStrictEqual(failure!.extra?.fix, [
       "ima2 defaults set image <lane>/<model>",

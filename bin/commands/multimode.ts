@@ -56,7 +56,7 @@ const HELP = `
     -d, --out-dir <dir>                 Output dir for multiple images
         --json
         --model <${[...KNOWN_IMAGE_MODELS].join("|")}>  Default: gpt-5.6-luna
-                                      Aliases: luna, sol, terra, spark
+                                      Aliases: luna, astra, sol, terra, spark
         --provider <${PROVIDER_VALUES.join("|")}>
                                       Provider (oauth = GPT OAuth; grok = xAI Grok; agy/gemini-api = Gemini)
         --mode <auto|direct>            Prompt handling mode. Default: auto

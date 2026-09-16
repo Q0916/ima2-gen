@@ -54,6 +54,46 @@ describe("gpt-5.6 rollout: runtime config", () => {
   });
 });
 
+// GPT-6 Astra was registered additively: selectable everywhere the 5.6 slugs
+// are, with every default left alone. PR #229 originally paired the same
+// registration with a repo-wide reasoning-effort change to "max"; that half was
+// deliberately not taken, so these assertions pin both halves - Astra present,
+// defaults unmoved - to stop either drifting back in unnoticed.
+describe("gpt-6 astra: additive registration", () => {
+  const ASTRA = "gpt-6-astra";
+
+  it("is selectable through validation, config and the generated UI catalog", () => {
+    assert.deepEqual(normalizeImageModel({}, ASTRA), { model: ASTRA });
+    assert.ok(config.imageModels.valid.has(ASTRA), "config valid set missing gpt-6-astra");
+    const rejection = normalizeImageModel({}, "gpt-6-nova");
+    assert.match(rejection.error ?? "", /gpt-6-astra/);
+    assert.ok(readSource("ui/src/generated/providers.ts").includes(`"${ASTRA}"`));
+  });
+
+  it("reaches the hand-maintained rosters the registry does not generate", () => {
+    assert.ok(readSource("bin/lib/model-aliases.ts").includes(`astra: "${ASTRA}"`));
+    assert.ok(readSource("bin/lib/error-hints.ts").includes(ASTRA));
+    assert.ok(readSource("ui/src/lib/imageModels.ts").includes(ASTRA));
+    assert.ok(readSource("ui/src/lib/agentModelOptions.ts").includes(ASTRA));
+    assert.ok(readSource("lib/promptBuilder/constants.ts").includes(ASTRA));
+    // The ComfyUI bridge is Python and derives from nothing; it is the surface
+    // the original attempt missed.
+    assert.ok(readSource("integrations/comfyui/ima2_gen_bridge/nodes.py").includes(ASTRA));
+    for (const locale of ["en", "ko", "zh-Hans", "zh-Hant"]) {
+      assert.ok(readSource(`ui/src/i18n/${locale}.json`).includes("gpt6Astra"), `${locale} missing gpt6Astra`);
+    }
+  });
+
+  it("leaves every default exactly where it was", () => {
+    assert.equal(config.imageModels.default, "gpt-5.6-luna");
+    assert.equal(config.apiProvider.defaultImageModel, "gpt-5.6-luna");
+    assert.equal(config.imageModels.reasoningEffort, "medium");
+    assert.equal(config.apiProvider.defaultReasoningEffort, "low");
+    assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.6-luna" });
+    assert.equal(readSource("ui/src/lib/reasoning.ts").match(/DEFAULT_REASONING_EFFORT: ReasoningEffort = "(\w+)"/)?.[1], "none");
+  });
+});
+
 describe("gpt-5.6 rollout: surface contracts", () => {
   it("CLI validators know the 5.6 slugs and max", () => {
     // gen.ts moved to catalog-driven validation (010 CLI strict routing):
