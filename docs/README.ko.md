@@ -150,6 +150,7 @@ Grok video 기본값은 정식 `grok-imagine-video-1.5`입니다. `grok-imagine-
 이미지 생성과 Prompt Builder의 앱 기본값은 **`gpt-5.6-luna`**입니다. 이전 모델은 호환 선택지로 남아 있습니다.
 
 - `gpt-5.6-luna` — 현재 이미지·Prompt Builder 기본값.
+- `gpt-6-astra` — 가장 최신 GPT 이미지 모델. 선택 가능하지만 기본값은 아닙니다.
 - `gpt-5.6-terra` / `gpt-5.6-sol` — 계정에서 지원할 때 고를 수 있는 GPT-5.6 대안.
 - `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini` — 호환 선택지.
 

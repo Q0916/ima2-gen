@@ -193,6 +193,7 @@ Grok video generation defaults to canonical `grok-imagine-video-1.5`; `grok-imag
 Image generation defaults to **`gpt-5.6-luna`** on the GPT lane. Prompt Builder backend selection is separate: **Auto** chooses the first ready supported text backend, while Settings can pin one explicitly. The `via <backend>` badge reports the backend that actually answered.
 
 - `gpt-5.6-luna` — current default image model on the GPT lane and the default GPT Builder model when that backend is selected.
+- `gpt-6-astra` — newest GPT image model; selectable, not the default.
 - `gpt-5.6-terra` / `gpt-5.6-sol` — current GPT-5.6 alternatives when your account exposes them.
 - `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini` — supported compatibility choices.
 

@@ -1,6 +1,6 @@
 import type { RuntimeContext } from "./runtimeContext.js";
 import { ATLASCLOUD_TEXT_TO_IMAGE_MODEL } from "./atlasCloudImageAdapter.js";
-import { FALLBACK_IMAGE_MODEL, normalizeImageModel, normalizeReasoningEffort, normalizeGrokImageModel, normalizeGeminiApiModel, normalizeMinimaxImageModel, normalizeNaiImageModel, normalizeComfyWorkflowModel } from "./imageModels.js";
+import { FALLBACK_IMAGE_MODEL, coerceReasoningEffortForModel, normalizeImageModel, normalizeReasoningEffort, normalizeGrokImageModel, normalizeGeminiApiModel, normalizeMinimaxImageModel, normalizeNaiImageModel, normalizeComfyWorkflowModel } from "./imageModels.js";
 
 export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
   provider = "oauth",
@@ -142,6 +142,9 @@ export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
   if (reasoningCheck.error) {
     return { error: reasoningCheck.error, code: reasoningCheck.code, status: reasoningCheck.status };
   }
+  // Applied after validation so an unsupported model/effort pairing cannot reach
+  // the upstream request. See coerceReasoningEffortForModel.
+  const effort = coerceReasoningEffortForModel(modelCheck.model, reasoningCheck.effort);
 
   const size = activeProvider === "api" && (typeof rawSize !== "string" || rawSize.length === 0)
     ? (apiConfig.defaultSize || "1024x1024")
@@ -153,7 +156,7 @@ export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
   return {
     provider: activeProvider as "api" | "oauth",
     model: modelCheck.model,
-    reasoningEffort: reasoningCheck.effort,
+    reasoningEffort: effort,
     size,
     webSearchEnabled,
   };

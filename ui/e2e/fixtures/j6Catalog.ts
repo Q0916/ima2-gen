@@ -29,8 +29,8 @@ function modelCatalog(state: J6CatalogState, composer = false): { ok: true; lane
   if (state.mode === "key-missing") return { ok: true, lanes: { oauth: lane(["gpt-5.6-luna"]), comfy: { status: "key-missing", models } } };
   if (state.mode === "disconnected") return { ok: true, lanes: { oauth: lane(["gpt-5.6-luna"]), comfy: { status: "disconnected", models } } };
   return { ok: true, lanes: {
-    oauth: lane(["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]),
-    api: lane(["gpt-5.6-luna", "gpt-5.6-sol"]),
+    oauth: lane(["gpt-5.6-luna", "gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol"]),
+    api: lane(["gpt-5.6-luna", "gpt-6-astra", "gpt-5.6-sol"]),
     grok: lane(["grok-imagine-image-2.0", "grok-imagine-image-quality"], ["grok-imagine-video-1.5"]),
     "grok-api": lane(["grok-imagine-image-2.0", "grok-imagine-image-quality"], ["grok-imagine-video-1.5"]),
     "gemini-api": lane(["nano-banana-pro", "nano-banana-2"]),

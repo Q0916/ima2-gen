@@ -21,6 +21,20 @@ describe("image model normalization", () => {
     assert.deepEqual(normalizeImageModel({}, "gpt-5.6-luna"), { model: "gpt-5.6-luna" });
   });
 
+  it("accepts gpt-6-astra without moving the default off Luna", () => {
+    assert.deepEqual(normalizeImageModel({}, "gpt-6-astra"), { model: "gpt-6-astra" });
+    assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.6-luna" });
+  });
+
+  // Short aliases are a CLI concern: bin/lib/model-aliases.ts resolves them
+  // before the request is sent. The server takes canonical ids only, and astra
+  // is rejected here exactly like luna, sol and terra are.
+  it("rejects short aliases on the server, astra included", () => {
+    for (const alias of ["astra", "luna", "sol", "terra"]) {
+      assert.equal(normalizeImageModel({}, alias).code, "INVALID_IMAGE_MODEL", `alias ${alias} must not resolve server-side`);
+    }
+  });
+
   it("rejects known unsupported OAuth models", () => {
     const result = normalizeImageModel({}, "gpt-5.3-codex-spark");
     assert.equal(result.code, "IMAGE_MODEL_UNSUPPORTED");

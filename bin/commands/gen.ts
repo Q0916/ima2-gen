@@ -76,7 +76,7 @@ const HELP = `
         --timeout <sec>                     Default: 180
         --server <url>                      Override server URL
         --model <model|lane/model>          Bare IDs must be unique across lanes
-                                            Core aliases: luna, sol, terra, spark
+                                            Core aliases: luna, astra, sol, terra, spark
         --provider <${PROVIDER_VALUES.join("|")}>
                                             'auto' was removed; choose a lane explicitly
         --mode <auto|direct>                Core lanes only. Default: auto

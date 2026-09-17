@@ -146,6 +146,14 @@ describe("prompt builder backend selection", () => {
 });
 
 describe("prompt builder model validation", () => {
+  it("offers Astra on the GPT lanes while both defaults stay on Luna", () => {
+    for (const backend of ["oauth", "api"] as const) {
+      assert.ok(PROMPT_BUILDER_MODELS[backend].includes("gpt-6-astra"));
+      assert.equal(normalizePromptBuilderModel(backend, "gpt-6-astra"), "gpt-6-astra");
+      assert.equal(DEFAULT_PROMPT_BUILDER_MODELS[backend], "gpt-5.6-luna");
+    }
+  });
+
   it("accepts every persisted catalog pair and rejects cross-backend pairs", () => {
     for (const backend of PROMPT_BUILDER_BACKENDS) {
       for (const model of PROMPT_BUILDER_MODELS[backend]) {

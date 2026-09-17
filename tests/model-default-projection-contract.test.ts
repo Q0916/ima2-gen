@@ -50,8 +50,15 @@ describe("current model defaults: runtime contract", () => {
   it("orders active UI model pickers from current defaults to compatibility choices", () => {
     assert.equal(DEFAULT_IMAGE_MODEL, "gpt-5.6-luna");
     assert.deepEqual(
-      IMAGE_MODEL_OPTIONS.slice(0, 6).map((option) => option.value),
-      ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"],
+      IMAGE_MODEL_OPTIONS.slice(0, 7).map((option) => option.value),
+      ["gpt-5.6-luna", "gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"],
+    );
+    // The two GPT pickers are maintained by hand in different files, so pin the
+    // OAuth order here too: without this they can silently drift apart, which is
+    // how a model ends up selectable in one surface and missing from the other.
+    assert.deepEqual(
+      AGENT_LLM_MODEL_OPTIONS.filter((option) => option.provider === "oauth").map((option) => option.value),
+      ["gpt-5.6-luna", "gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"],
     );
     assert.deepEqual(
       AGENT_LLM_MODEL_OPTIONS.filter((option) => option.provider === "grok").map((option) => option.value),

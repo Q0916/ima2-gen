@@ -5,7 +5,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { normalizeImageModel, normalizeReasoningEffort } from "../lib/imageModels.ts";
+import { coerceReasoningEffortForModel, normalizeImageModel, normalizeReasoningEffort } from "../lib/imageModels.ts";
+import { resolveProviderOptions } from "../lib/providerOptions.ts";
 import { config } from "../config.ts";
 
 const GPT56_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
@@ -51,6 +52,69 @@ describe("gpt-5.6 rollout: runtime config", () => {
       assert.ok(config.imageModels.valid.has(model), `config valid set missing ${model}`);
     }
     assert.ok(config.imageModels.validReasoningEfforts.has("max"));
+  });
+});
+
+// GPT-6 Astra was registered additively: selectable everywhere the 5.6 slugs
+// are, with every default left alone. PR #229 originally paired the same
+// registration with a repo-wide reasoning-effort change to "max"; that half was
+// deliberately not taken, so these assertions pin both halves - Astra present,
+// defaults unmoved - to stop either drifting back in unnoticed.
+describe("gpt-6 astra: additive registration", () => {
+  const ASTRA = "gpt-6-astra";
+
+  it("is selectable through validation, config and the generated UI catalog", () => {
+    assert.deepEqual(normalizeImageModel({}, ASTRA), { model: ASTRA });
+    assert.ok(config.imageModels.valid.has(ASTRA), "config valid set missing gpt-6-astra");
+    const rejection = normalizeImageModel({}, "gpt-6-nova");
+    assert.match(rejection.error ?? "", /gpt-6-astra/);
+    assert.ok(readSource("ui/src/generated/providers.ts").includes(`"${ASTRA}"`));
+  });
+
+  it("reaches the hand-maintained rosters the registry does not generate", () => {
+    assert.ok(readSource("bin/lib/model-aliases.ts").includes(`astra: "${ASTRA}"`));
+    assert.ok(readSource("bin/lib/error-hints.ts").includes(ASTRA));
+    assert.ok(readSource("ui/src/lib/imageModels.ts").includes(ASTRA));
+    assert.ok(readSource("ui/src/lib/agentModelOptions.ts").includes(ASTRA));
+    assert.ok(readSource("lib/promptBuilder/constants.ts").includes(ASTRA));
+    // The ComfyUI bridge is Python and derives from nothing; it is the surface
+    // the original attempt missed.
+    assert.ok(readSource("integrations/comfyui/ima2_gen_bridge/nodes.py").includes(ASTRA));
+    for (const locale of ["en", "ko", "zh-Hans", "zh-Hant"]) {
+      assert.ok(readSource(`ui/src/i18n/${locale}.json`).includes("gpt6Astra"), `${locale} missing gpt6Astra`);
+    }
+  });
+
+  it("leaves every default exactly where it was", () => {
+    assert.equal(config.imageModels.default, "gpt-5.6-luna");
+    assert.equal(config.apiProvider.defaultImageModel, "gpt-5.6-luna");
+    assert.equal(config.imageModels.reasoningEffort, "medium");
+    assert.equal(config.apiProvider.defaultReasoningEffort, "low");
+    assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.6-luna" });
+    assert.equal(readSource("ui/src/lib/reasoning.ts").match(/DEFAULT_REASONING_EFFORT: ReasoningEffort = "(\w+)"/)?.[1], "none");
+  });
+
+  // Astra accepts low/medium/high/xhigh/max but not "none", and "none" is this
+  // app's own UI default. Selecting Astra therefore has to coerce rather than
+  // forward, or the request fails upstream before any image exists.
+  it("coerces only the effort Astra cannot accept, and only for Astra", () => {
+    assert.equal(coerceReasoningEffortForModel(ASTRA, "none"), "low");
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+      assert.equal(coerceReasoningEffortForModel(ASTRA, effort), effort, `${effort} must pass through untouched`);
+    }
+    for (const model of [...GPT56_MODELS, "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]) {
+      assert.equal(coerceReasoningEffortForModel(model, "none"), "none", `${model} must keep none`);
+    }
+    assert.equal(coerceReasoningEffortForModel(undefined, "none"), "none");
+  });
+
+  it("does not let the app's default effort reach Astra unchanged", () => {
+    const uiDefault = readSource("ui/src/lib/reasoning.ts").match(/DEFAULT_REASONING_EFFORT: ReasoningEffort = "(\w+)"/)?.[1];
+    const resolved = resolveProviderOptions(null, { provider: "oauth", rawModel: ASTRA, rawReasoningEffort: uiDefault });
+    assert.equal(resolved.error, undefined);
+    assert.equal(resolved.model, ASTRA);
+    assert.notEqual(resolved.reasoningEffort, "none");
+    assert.equal(resolved.reasoningEffort, "low");
   });
 });
 
