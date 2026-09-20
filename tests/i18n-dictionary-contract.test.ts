@@ -81,6 +81,7 @@ const DYNAMIC_T_IDENTIFIERS = new Map<string, readonly string[]>([
   ["ui/src/components/ImageModelSelect.tsx :: option.fullLabelKey", [
     "settings.imageModel.gpt54Mini", "settings.imageModel.gpt54", "settings.imageModel.gpt55",
     "settings.imageModel.gpt56Sol", "settings.imageModel.gpt56Terra", "settings.imageModel.gpt56Luna",
+    "settings.imageModel.gpt6Astra",
     "settings.imageModel.grokImagineQuality", "settings.imageModel.grokImagine",
     "settings.imageModel.nanoBanana2", "settings.imageModel.nanoBanana2Api",
     "settings.imageModel.nanoBananaPro", "settings.imageModel.gpt53CodexSpark",
@@ -99,6 +100,7 @@ const DYNAMIC_T_IDENTIFIERS = new Map<string, readonly string[]>([
   ["ui/src/components/ProviderReadinessPopup.tsx :: imageModelOption.fullLabelKey", [
     "settings.imageModel.gpt54Mini", "settings.imageModel.gpt54", "settings.imageModel.gpt55",
     "settings.imageModel.gpt56Sol", "settings.imageModel.gpt56Terra", "settings.imageModel.gpt56Luna",
+    "settings.imageModel.gpt6Astra",
     "settings.imageModel.grokImagineQuality", "settings.imageModel.grokImagine",
     "settings.imageModel.nanoBanana2", "settings.imageModel.nanoBanana2Api",
     "settings.imageModel.nanoBananaPro",
