@@ -441,6 +441,34 @@ npm run build
 
 `npm run dev` builds the UI and starts the TypeScript server entry with `--watch` and verbose server diagnostics. `npm run typecheck`, `npm run build:server`, and `npm run build:cli` verify the TypeScript migration and package emit path. Node mode and Canvas Mode are part of the packaged UI by default.
 
+### Desktop app (Electron)
+
+`desktop/` wraps the same local server and UI in a menubar/tray app for macOS, Windows, and Linux. It supervises `server.js` as a child process (attaching to an already-running server on the configured port instead of starting a second one) and adds a native settings window: port, open at login, start hidden, menubar-only (macOS), keep-server-on-close, log level, config directory.
+
+```bash
+cd desktop
+npm install
+npm run prepare:app     # builds server + CLI + UI at the repo root
+npm start               # run unpackaged
+npm run dist:mac        # dmg + zip (arm64, x64)
+npm run dist:win        # nsis + zip
+npm run dist:linux      # AppImage + deb
+```
+
+Installers are produced by `.github/workflows/desktop.yml` on `desktop-v*` tag pushes, desktop PRs, or manual dispatch. PRs produce unsigned macOS previews without Apple credentials. Trusted macOS builds require `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`; missing or invalid authentication fails the build instead of producing an unsigned success.
+
+For a macOS-only verification build without publishing, run:
+
+```bash
+gh workflow run desktop.yml --ref <reviewed-branch> -f platform=mac -f publish=false
+```
+
+The workflow verifies Developer ID, team, architecture, hardened runtime, secure timestamp, nested signatures, Gatekeeper and stapled notarization tickets for both arm64 and x64. It checks the apps recovered from the final ZIP and DMG against the original signed content, then exports `ima2-macos-signature-proof` reports and installer SHA-256 hashes. Failed verification blocks installer upload. Manual dispatch with `publish=false` never publishes, even when its ref is a desktop tag; publishing a manual build requires `platform=all`.
+
+Signing credential imports run on disposable GitHub-hosted macOS. The builder cleans successfully imported keychains; if import/setup fails before its cleanup registration, runner destruction is the final cleanup boundary. Local recovery should reuse an existing login-keychain identity in the same unlocked session, rather than importing credential packages into a persistent machine. This does not require changing automatic locking or key access rules.
+
+Windows Authenticode remains separate and uses `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD`; Windows builds without them are unsigned.
+
 ## Contributors
 
 - [@lidge-jun](https://github.com/lidge-jun) — maintainer
