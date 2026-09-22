@@ -17,11 +17,13 @@ import { errInfo } from "./errInfo.js";
 import type { RuntimeContext } from "./runtimeContext.js";
 import { imageFormatFromMime, writeSse, dataUrlFromB64 } from "./routeHelpers.js";
 import { validateNodeInputs } from "./nodeValidation.js";
+import { validateExtraParentNodeIds } from "./nodeValidation.js";
+import { resolveNodeReferences } from "./nodeReferences.js";
 import { publish } from "./eventBus.js";
 import { publishJobEvent } from "./ssePublish.js";
 import { type NodeGenerateBody, asUpstream, wantsSse, writeNodeError, loadParentNodeB64, nodeErrorDetails, } from "./nodeHelpers.js";
 import { normalizeBodyRequestId, validateGenerationPrompt } from "./generationInputValidation.js";
-import { deriveReferenceLimit, getProviderSurfaceSupport } from "./providers/derive.js";
+import { getProviderSurfaceSupport } from "./providers/derive.js";
 import { errorEnvelopeFields } from "./errors/envelope.js";
 export async function runNodeGeneration(req: Request, res: Response, ctx: RuntimeContext) {
     const body = (req.body ?? {}) as NodeGenerateBody;
@@ -30,6 +32,15 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
     const asyncMode = body.async === true;
     const streamResponse = !asyncMode && wantsSse(req);
     const parentNodeId = (typeof body.parentNodeId === "string" ? body.parentNodeId : null);
+    const extraParentValidation = validateExtraParentNodeIds(
+      body.extraParentNodeIds,
+      parentNodeId,
+      ctx.config.limits.maxRefCount,
+    );
+    if (extraParentValidation.error) {
+      return res.status(400).json({ error: extraParentValidation.error, parentNodeId });
+    }
+    const extraParentNodeIds = extraParentValidation.ids;
     const requestId = normalizeBodyRequestId(body.requestId, req.id);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
     const clientNodeId = typeof body.clientNodeId === "string" ? body.clientNodeId : null;
@@ -146,61 +157,23 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
       const referenceDiagnostics = refCheck.referenceDiagnostics || [];
       const generateReferenceDiagnostics = operation === "generate" ? referenceDiagnostics : [];
       const referenceMismatchCount = generateReferenceDiagnostics.filter((ref) => ref.warnings?.includes("mime_mismatch")).length;
-      const refsForRequest = contextMode === "parent-only" ? [] : (refCheck.refDetails || refCheck.refs);
+      const resolvedReferences = await resolveNodeReferences(ctx, {
+        provider: activeProvider,
+        parentB64,
+        extraParentNodeIds,
+        userReferences: refCheck.refDetails,
+        contextMode,
+      });
+      if (resolvedReferences.failure) {
+        const { status, code, message } = resolvedReferences.failure;
+        finishStatus = "error";
+        finishHttpStatus = status;
+        finishErrorCode = code;
+        return res.status(status).json({ error: { code, message }, code, parentNodeId });
+      }
+      const refsForRequest = resolvedReferences.executionReferences;
       const parentImagePresent = !!parentB64;
-      const inputImageCount = (parentImagePresent ? 1 : 0) + refsForRequest.length;
-      const providerReferenceLimit = deriveReferenceLimit(activeProvider, "edit");
-      if ((activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api") && inputImageCount > providerReferenceLimit!) {
-        finishStatus = "error";
-        finishHttpStatus = 400;
-        const code = activeProvider === "agy" ? "AGY_REF_TOO_MANY" : "GROK_REF_TOO_MANY";
-        return res.status(400).json({
-          error: {
-            code,
-            message: `${activeProvider === "agy" ? "Agy" : "Grok"} image editing supports up to ${providerReferenceLimit} reference images.`,
-          },
-          code,
-          parentNodeId,
-        });
-      }
-      if (activeProvider === "atlascloud" && inputImageCount > providerReferenceLimit!) {
-        finishStatus = "error";
-        finishHttpStatus = 400;
-        return res.status(400).json({
-          error: {
-            code: "ATLASCLOUD_REF_TOO_MANY",
-            message: `Atlas Cloud image editing supports up to ${providerReferenceLimit} reference images.`,
-          },
-          code: "ATLASCLOUD_REF_TOO_MANY",
-          parentNodeId,
-        });
-      }
-      if (activeProvider === "minimax" && inputImageCount > providerReferenceLimit!) {
-        finishStatus = "error";
-        finishHttpStatus = 400;
-        return res.status(400).json({
-          error: {
-            code: "MINIMAX_REF_TOO_MANY",
-            message: `MiniMax image editing supports up to ${providerReferenceLimit} subject reference.`,
-          },
-          code: "MINIMAX_REF_TOO_MANY",
-          parentNodeId,
-        });
-      }
-      // Node mode chains images, so a parent node is exactly the reference the
-      // adapter cannot use. Refuse instead of generating something unrelated.
-      if (getProviderSurfaceSupport(activeProvider ?? "", "node")?.references === false && inputImageCount > 0) {
-        finishStatus = "error";
-        finishHttpStatus = 400;
-        return res.status(400).json({
-          error: {
-            code: "NAI_REF_UNSUPPORTED",
-            message: "NovelAI image generation does not accept input images yet.",
-          },
-          code: "NAI_REF_UNSUPPORTED",
-          parentNodeId,
-        });
-      }
+      const inputImageCount = resolvedReferences.inputImageCount;
       const admission = checkImageExecutionAdmission(ctx, {
         provider: activeProvider, surface: "node", referenceCount: inputImageCount,
       });
@@ -260,7 +233,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
         ...(imageToolModel ? { imageToolModel } : {}),
         size: effectiveSize,
         moderation,
-        refs: refsForRequest.length,
+        refs: resolvedReferences.reportedReferenceCount,
         referenceBytes: referencePayload.referenceBytes,
         referenceMismatchCount,
         refDetectedMimes: [...new Set(generateReferenceDiagnostics.map((ref) => ref.detectedMime).filter(Boolean))].join(","),
@@ -289,7 +262,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
       const execution = await prepareImageExecution(ctx, {
         surface: "node", provider: activeProvider, requestId,
         signal: cancelController.signal, prompt: generationPrompt, rawPrompt: prompt,
-        references: refCheck.refDetails, sourceImage: parentB64, contextMode, searchMode,
+        references: refsForRequest, sourceImage: parentB64, contextMode, searchMode,
         partialImages: emitProgress ? 2 : 0,
         options: { model: effectiveImageModel, imageToolModel, quality, size: effectiveSize, moderation,
           mode: normalizedPromptMode, reasoningEffort, webSearchEnabled },
@@ -319,7 +292,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
             moderation,
             quality,
             size: effectiveSize,
-            refs: refsForRequest.length,
+            refs: resolvedReferences.reportedReferenceCount,
             inputImageCount,
             parentImagePresent,
             contextMode,
@@ -417,7 +390,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
         provider: activeProvider,
         kind: parentB64 ? "edit" : "generate",
         requestId,
-        refsCount: refsForRequest.length,
+        refsCount: resolvedReferences.reportedReferenceCount,
         quality,
         size: effectiveSize,
         format: resultFormat,
@@ -459,7 +432,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
         size: effectiveSize,
         format: resultFormat,
         moderation,
-        refsCount: refsForRequest.length,
+        refsCount: resolvedReferences.reportedReferenceCount,
         contextMode,
         searchMode,
         warnings: qualityWarnings,

@@ -3,7 +3,7 @@ import { cancelInflight } from "../lib/api";
 import { newClientNodeId, type ClientNodeId } from "../lib/graph";
 import {
   deriveParentServerNodeIds,
-  wouldCreateMultipleIncomingEdge,
+
   wouldCreateCycle,
 } from "../lib/nodeGraph";
 import { getNextChildPosition, getNextRootPosition } from "../lib/nodeLayout";
@@ -426,10 +426,6 @@ export function connectNodesImpl(
     (e) => e.source === sourceClientId && e.target === targetClientId,
   );
   if (existing) return;
-  if (wouldCreateMultipleIncomingEdge(get().graphEdges, sourceClientId, targetClientId)) {
-    get().showToast(t("edge.parentConflict"), true);
-    return;
-  }
   if (wouldCreateCycle(get().graphEdges, sourceClientId, targetClientId)) {
     get().showToast(t("edge.cycleBlocked"), true);
     return;
