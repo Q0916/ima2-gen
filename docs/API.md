@@ -309,7 +309,7 @@ Import without a manifest returns `SPRITE_MANIFEST_REQUIRED`. GIF export returns
 ### `GET /api/prompt-files`
 
 Advertises native document attachment support: `transport: "input_file"`,
-`providers: ["oauth", "api"]`, `extensions: [".md", ".txt"]`, and byte/count
+`providers: ["oauth", "api"]`, `modes: ["auto"]`, `extensions: [".md", ".txt"]`, and byte/count
 limits. Clients must verify this before submitting files to an older server.
 
 ### `POST /api/generate`
@@ -318,6 +318,9 @@ Text-to-image and reference-guided root generation.
 
 Optional `promptFiles: [{ "filename": "page.md", "data": "<base64 UTF-8 bytes>" }]`
 attaches documents as Responses `input_file` items on OAuth/API. `prompt` remains
+the cover message; the model composes the actual visual prompt from the documents.
+Attachments with `mode: "direct"` return `PROMPT_FILES_REQUIRE_AUTO` before submission.
+The `prompt` field is
 a short instruction; documents do not count toward its character limit. No server
 paths or URLs are accepted. Invalid files return `INVALID_PROMPT_FILE`; unsupported
 providers return `PROMPT_FILES_UNSUPPORTED`. See [limits and CLI usage](prompt-file-attachments.md).

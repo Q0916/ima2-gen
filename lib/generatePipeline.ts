@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { buildFilename, writeFileUnique } from "./filename.js";
 import type { Request, Response } from "express";
 import { detectImageMimeFromB64, summarizeReferencePayload, validateAndNormalizeRefs } from "./refs.js";
-import { validatePromptFiles, promptFileManifest } from "./promptFiles.js";
+import { validatePromptFiles, promptFileManifest, requirePromptFileMode } from "./promptFiles.js";
 import { generateImageThumbnailFromBuffer } from "./imageThumb.js";
 import { classifyUpstreamError } from "./errorClassify.js";
 import { appendGenerationRequestLog } from "./generationRequestLog.js";
@@ -141,6 +141,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
         webSearchEnabled: rawWebSearchEnabled = true,
       } = req.body;
       const promptFiles = validatePromptFiles(req.body?.promptFiles);
+      requirePromptFileMode(promptFiles, promptMode);
       const promptError = validateGenerationPrompt(prompt);
       if (promptError) return fail(400, promptError);
 

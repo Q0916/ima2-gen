@@ -1,4 +1,4 @@
-import { promptFileInputs } from "../../promptFiles.js";
+import { promptFileInputs, requirePromptFileMode, PROMPT_FILE_COMPOSITION_INSTRUCTION } from "../../promptFiles.js";
 import { compressReferenceB64ForOAuth } from "../../referenceImageCompress.js";
 import { detectImageMimeFromB64 } from "../../refs.js";
 import { type RouteRuntimeContext, requireRuntimeContext } from "../../runtimeContext.js";
@@ -42,6 +42,7 @@ function normalizeRef(ref: ReferenceRef) {
 }
 
 export async function generateViaResponses(provider: string | undefined, prompt: string | undefined, quality: string | undefined, size: string | undefined, moderation: string = "low", references: ReferenceRef[] = [], requestId: string | null = null, mode: string = "auto", ctxRaw: RouteRuntimeContext = {}, options: GenerateOptions = {}) {
+  requirePromptFileMode(options.promptFiles ?? [], mode);
   const ctx = requireRuntimeContext(ctxRaw);
   const model = options.model || ctx.config?.imageModels?.default || "gpt-5.6-luna";
   const webSearchEnabled = options.webSearchEnabled !== false && options.searchMode !== "off";
@@ -62,9 +63,12 @@ export async function generateViaResponses(provider: string | undefined, prompt:
   const toolChoiceKind = imageToolChoiceKind(toolChoice);
   const referenceInputs = references.map(normalizeRef);
   const documentInputs = promptFileInputs(options.promptFiles);
-  const userContent = referenceInputs.length || documentInputs.length
-    ? [...referenceInputs, ...documentInputs, { type: "input_text", text: buildUserTextPrompt(prompt, mode, { webSearchEnabled, size }) }]
+  const userText = documentInputs.length
+    ? `${PROMPT_FILE_COMPOSITION_INSTRUCTION}\nRequested image size: ${size ?? "auto"}.\nCover message:\n${prompt ?? ""}`
     : buildUserTextPrompt(prompt, mode, { webSearchEnabled, size });
+  const userContent = referenceInputs.length || documentInputs.length
+    ? [...referenceInputs, ...documentInputs, { type: "input_text", text: userText }]
+    : userText;
   const result = await postResponses({
     ctx,
     provider,
@@ -77,7 +81,8 @@ export async function generateViaResponses(provider: string | undefined, prompt:
     payload: {
       model,
       input: [
-        { role: "developer", content: webSearchEnabled ? GENERATE_DEVELOPER_PROMPT : GENERATE_NO_SEARCH_DEVELOPER_PROMPT },
+        { role: "developer", content: (webSearchEnabled ? GENERATE_DEVELOPER_PROMPT : GENERATE_NO_SEARCH_DEVELOPER_PROMPT)
+          + (documentInputs.length ? `\n\n${PROMPT_FILE_COMPOSITION_INSTRUCTION}` : "") },
         { role: "user", content: userContent },
       ],
       tools: requestTools,

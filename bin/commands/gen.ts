@@ -1,4 +1,5 @@
 import { loadPromptFiles, requirePromptFileSupport } from "../lib/prompt-files.js";
+import { requirePromptFileMode } from "../../lib/promptFiles.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { config } from "../../config.js";
@@ -312,6 +313,7 @@ function validateCoreFlags(args: ParsedArgs): void {
 async function requestCoreImage(args: ParsedArgs, context: ImageContext, n: number, requestId: string) {
   const paths = (Array.isArray(args["prompt-file"]) ? args["prompt-file"] : []) as string[];
   const promptFiles = await loadPromptFiles(paths);
+  requirePromptFileMode(promptFiles, args.mode);
   if (promptFiles.length) await requirePromptFileSupport(context.server.base);
   const references = await Promise.all(context.refs.map((path: string) => fileToDataUri(path)));
   const body: Record<string, unknown> = { prompt: context.prompt, quality: args.quality, size: args.size, n, references,

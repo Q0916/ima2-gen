@@ -13,8 +13,10 @@ node bin/ima2.js gen "Read the attached prompt in full and generate the requeste
 ```
 
 The positional prompt is optional when files are supplied. `--stdin` may supply
-a short cover instruction. Use `auto` when the model needs to interpret a long
-document into an image-tool prompt; explicit `direct` keeps its existing behavior.
+a short cover instruction. Attachments require `--mode auto` so the model reads
+the documents and composes the actual scene prompt for the image tool.
+`direct` with attachments is rejected before submission: copying the short cover
+verbatim produced reference sheets with tracking IDs instead of the requested scene.
 This feature currently covers CLI `gen` and POST `/api/generate`, not Studio UI,
 `edit`, `multimode`, or other provider lanes.
 
@@ -55,6 +57,11 @@ The receipt-bound `prompt_file` is attached unchanged. Existing jobs default to 
   verified, not exact image-size adherence or artistic quality.
 - Unit/integration coverage checks invalid files, byte limits, old-server refusal,
   native request content, no file-dropping fallback, and saved provenance.
+- These transport checks do not prove scene transfer. A subsequent comic batch
+  exposed the direct-mode conflict: all three revised prompts contained only the
+  cover/ID. Attachment requests now use document-aware composition instructions
+  and reject direct mode in the CLI, server and adapter. Validate scene transfer
+  using the saved revised prompt and a scoped output check before scaling a repair.
 - Server/test TypeScript checks, server/CLI builds, UI build, test inventory and
   68 CLI/auth/API compatibility tests passed. The full Windows run finished with
   3,624 passed, 22 failed, 5 skipped: remaining failures include symlink `EPERM`,

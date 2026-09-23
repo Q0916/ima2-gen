@@ -135,7 +135,7 @@ test("classic route forwards long Markdown and saves exact attachment provenance
   await withGenerateApp(async (baseUrl, generatedDir) => {
     const capabilities = await (await fetch(`${baseUrl}/api/prompt-files`)).json() as { transport: string };
     assert.equal(capabilities.transport, "input_file");
-    for (const extra of [{ provider: "grok" }, { promptFiles: [{ ...doc, filename: "bad.png" }] }]) {
+    for (const extra of [{ provider: "grok" }, { promptFiles: [{ ...doc, filename: "bad.png" }] }, { mode: "direct" }]) {
       const rejected = await fetch(`${baseUrl}/api/generate`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: "Follow the document", provider: "api", promptFiles: [doc], ...extra }),

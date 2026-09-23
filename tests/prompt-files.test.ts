@@ -56,12 +56,18 @@ test("Responses generation sends native files and never retries without them", a
     assert.equal(content.find((x: { type: string }) => x.type === "input_file").file_data,
       "data:text/markdown;base64," + doc.data);
     assert(!content.find((x: { type: string }) => x.type === "input_text").text.includes(text));
+    assert.match(content.find((x: { type: string }) => x.type === "input_text").text, /self-contained image_generation prompt/);
+    assert.match(body.input[0].content, /not copying the short cover message/);
+    assert.doesNotMatch(content.find((x: { type: string }) => x.type === "input_text").text, /exact prompt, no modifications/);
     return new Response('data: {"type":"response.completed","response":{"output":[]}}\n\n',
       { headers: { "Content-Type": "text/event-stream" } });
   };
   try {
     await assert.rejects(generateViaResponses("api", "Draw the attached scene", "low", "1024x1536", "low", [],
-      null, "direct", { config, apiKey: "sk-test" }, { promptFiles: [doc], webSearchEnabled: false, allowPromptOnlyOAuthFallback: true }));
+      null, "auto", { config, apiKey: "sk-test" }, { promptFiles: [doc], webSearchEnabled: false, allowPromptOnlyOAuthFallback: true }));
     assert.equal(calls, 1);
+    await assert.rejects(generateViaResponses("api", "tracking-id", "low", "1024x1536", "low", [],
+      null, "direct", { config, apiKey: "sk-test" }, { promptFiles: [doc] }), { code: "PROMPT_FILES_REQUIRE_AUTO" });
+    assert.equal(calls, 1, "invalid mode must never submit upstream");
   } finally { globalThis.fetch = original; }
 });
