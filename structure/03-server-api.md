@@ -304,6 +304,8 @@ When `groupBy=session` is used, session groups include `title` and `label` when 
 
 `routes/assets.ts` and `lib/assetsStore.ts` implement a SQLite catalog over files already stored in the configured generated directory; the catalog does not duplicate image or video bytes. Asset kinds are the closed enum `image | video | element | preset | template`. Image and video creation requires a validated regular file under generated storage, while the other kinds may be metadata-only. Listing supports kind, folder, tag, and name/notes search filters with opaque `(createdAt, id)` cursor pagination (default 50, maximum 500).
 
+Node templates are `template` assets (`lib/nodeTemplateStore.ts`, `routes/nodeTemplates.ts`). `GET /api/node-templates/:id/export` and `POST /api/node-templates/import` move one template between machines as an `ima2.node-template` v1 file (`lib/nodeTemplateFile.ts`). The file is a boundary for untrusted input. The graph is rebuilt from node, edge and data allowlists in both directions, because React Flow applies node-level keys such as `style` and `domAttributes` to the DOM. The import route has its own 2 MB JSON parser in `server.ts`, ahead of the global body limit, and it maps parser failures to fixed codes. Imports get new ids and are never instantiated or run. See `docs/API.md` for limits and error codes.
+
 `routes/assetDerived.ts` registers `POST /api/assets/derived`, which writes a derived
 file next to its source and registers it as an `image` asset carrying a `derivedKind`
 metadata marker. `keyed-png` uploads a client-composited alpha PNG as a raw body.
@@ -512,6 +514,14 @@ or upstream completion guarantee is introduced.
 
 ## Node Mode API
 
+`extraParentNodeIds?: string[]` supplies additional saved node images. The primary
+`parentNodeId` remains the editable base; deduplicated extra parents precede user
+references in the provider request. Explicit missing/invalid extras fail, and
+combined configured reference limits apply before provider admission. Parent-only
+skips loading extra parents; existing adapter-specific user-reference behavior
+is preserved. Graph session edge ordering is explicit so reloading cannot swap
+base and reference roles.
+
 | Method | Path | Body or query | Response |
 |---|---|---|---|
 | `POST` | `/api/node/generate` | `{ parentNodeId?, prompt, quality?, size?, format?, moderation?, model?, references?, externalSrc?, contextMode?, searchMode?, sessionId?, clientNodeId?, requestId?, provider? }` | `{ nodeId, parentNodeId, requestId, image, filename, url, elapsed, usage, webSearchCalls, provider, moderation, model, refsCount, contextMode, searchMode }` |
@@ -523,7 +533,9 @@ Node context is explicit. `contextMode` defaults to `parent-plus-refs`, meaning 
 
 `/api/node/generate` also supports an SSE response when the client sends `Accept: text/event-stream`. In that mode validation still happens before headers are opened. After the stream opens, the server may emit `phase`, `partial`, `done`, and `error` events. Root generation opts into OAuth `partial_images: 2`; child/edit generation stays final-only for now. If an upstream stream error happens after headers are committed, the outer HTTP status may remain `200`; clients must read the SSE `error` event and node state. Clients must treat partial events as progressive previews only and use the `done` payload as the canonical saved node.
 
-Upstream request/validation failures are normalized to `INVALID_REQUEST` while preserving raw provider diagnostics as `upstreamCode`, `upstreamType`, and `upstreamParam`. In SSE mode these fields travel inside the `error` event payload together with `status`.
+Upstream request/validation failures are normalized to `INVALID_REQUEST` while preserving provider diagnostics as `upstreamCode`, `upstreamType`, and `upstreamParam`. In SSE mode these fields travel inside the `error` event payload together with `status`.
+
+Provider diagnostic fields are machine labels, never sentences. `upstreamCode`, `upstreamType` and `upstreamParam` pass through `safeDiagnosticLabel` (`lib/diagnosticLabel.ts`, re-exported by `lib/responsesParse.ts`); every error envelope (generate/edit `upstreamErrorFields`, edit, multimode, node catch and node envelopes) emits them through `upstreamLabelFields`: values over 120 characters, values that are not a single code-like token, and credential shapes (Bearer, `sk-`, `sk_live_`/`sk_test_`, `xai-`/`xai_`, `AIza`, `AKIA`, JWTs, `gh[pousr]_`, `password`/`secret`/`token`/`api_key` key=value, unbroken alphanumeric runs of 32+ characters, URLs, `@`) become `_redacted`. When a Responses image item fails, `emptyResponseError` carries that item's code and type labels in `upstreamCode`/`upstreamType`; the stable ima2 code (for example `IMAGE_TOOL_FAILED`) still decides classification and retries, and the user-facing message stays fixed. The provider's own `error.message` sentence is not parsed into diagnostics, logs or envelopes, because redaction patterns cannot prove a free-form sentence free of prompts or credentials (PR 256 WP3 deliberately rejected that). Providers remain untrusted, and pattern matching has limits: a credential split by `-` or `_` into runs shorter than 32 characters with no recognised prefix (for example some `org-`/`sess-` style identifiers) still passes as a label. Known remaining exposure: the OAuth passthrough keeps the provider's message (`lib/oauthProxy/errors.ts`); node envelopes and the `node.final_error` log filter its code and type labels at emission.
 
 Node sidecars include `requestId` as recovery metadata. `/api/history` exposes the same field so a reloaded graph can match completed assets by request id before falling back to `(sessionId, clientNodeId, createdAt)`.
 
@@ -706,7 +718,7 @@ Generation, edit, node, OAuth stream, inflight, history, and session graph saves
 
 Logs must never include raw prompts, effective prompts, revised prompts, OAuth/API tokens, authorization headers, cookies, raw request bodies, reference data URLs, generated base64, or raw upstream response bodies. Use counts and sizes instead: `promptChars`, `refs`, `imageChars`, `durationMs`, `httpStatus`, and `errorCode`.
 
-Node retry diagnostics include safe context such as `operation`, `clientNodeId`, `parentNodeId`, `errorEventType`, `errorEventCount`, and `upstreamCode`. They must not log prompt text or image payloads.
+Node retry diagnostics include safe context such as `operation`, `clientNodeId`, `parentNodeId`, `errorEventType`, `errorEventCount`, and the filtered `upstreamCode`/`upstreamType` labels (`finalErrorUpstreamLabels`). They must not log prompt text or image payloads.
 
 ## Sync Checklist
 

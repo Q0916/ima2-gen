@@ -6,6 +6,12 @@ aliases: [ima2 frontend, ima2 React UI, image_gen frontend]
 
 # Frontend Architecture
 
+Node graph image inputs accept multiple connections. `nodeGraph` derives the
+first image parent's server ID and ordered additional reference IDs; element
+references retain their separate resolution. `NodeCanvas` displays localized
+base/ref edge roles when multiple image parents exist. Generation and batch
+updates recalculate derived IDs so replacing a reference never makes it the base.
+
 API image model is a distinct optional `imageToolModel` in generation defaults.
 `GenerationControlsPanel` uses the shared Select; default/upstream stays unselected.
 Classic, edit, multimode and node requests forward it only for the API lane. Provider
@@ -290,6 +296,8 @@ The monolithic `useAppStore` was split into focused `store*Impl.ts` modules to k
 Node generation uses `postNodeGenerateStream()` which subscribes to the event channel, sends `{ async: true }`, and receives progress through the shared `GET /api/events` SSE. Partial images are stored only in transient `ImageNodeData.partialImageUrl`; they are deleted from the graph save payload. The final `done` payload replaces the preview with the canonical saved file URL. CLI clients that send `Accept: text/event-stream` instead of `async: true` still receive per-request SSE for backward compatibility. SSE `error` payloads preserve `status` so upstream validation failures can route to the same UI surface as JSON failures.
 
 Node selection batch actions live on the canvas, not in Settings. `NodeCanvas` exposes a compact selection bar inside the React Flow area. Selection mode treats a normal node click as selecting the whole undirected connected component. Cmd/Ctrl modifies that selection: another component is added/removed, while a node inside the selected component can be toggled as an exception. Batch regeneration is sequential and in-place for selected nodes only; it does not use the single-node ready-state sibling branch.
+
+Ready node images carry a zoom button (`node-canvas/NodeImagePreview.tsx`) that portals the shared `AssetMediaLightbox` to `document.body`, because a percentage-width panel inside React Flow's scaled viewport would size against the node. Node mode passes `showAssetActions={false}`, since the keying, vectorize and sprite-curator panels are only mounted by asset workspaces. React bubbles portal events through the node, so a `.nokey` wrapper stops dialog clicks and graph keys (Delete, arrows, undo) while Escape and Tab still reach the dialog's document listener. `NodeIdentityHeader` shows the node id as a drag grip with a separate `nodrag` copy icon.
 
 Ready node actions are split in `ImageNode`: `Regenerate` replaces the current node in place, while `New variant` creates and generates into a sibling node. The store preserves this action choice through custom-size confirmation so a confirmed in-place regeneration cannot accidentally take the sibling path. Node layout helpers place new roots/children using actual existing node positions instead of raw edge counts, avoiding overlap after a middle child is deleted.
 

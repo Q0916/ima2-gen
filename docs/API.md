@@ -425,6 +425,7 @@ Body fields:
 ```json
 {
   "parentNodeId": "optional-server-node-id",
+  "extraParentNodeIds": ["optional-reference-node-id"],
   "prompt": "continue this image",
   "quality": "medium",
   "size": "1024x1024",
@@ -441,6 +442,16 @@ Body fields:
 ```
 
 When `parentNodeId` is present, the server loads the stored parent node image and uses the edit path. Node-local references are allowed on both root and child/edit nodes; for child/edit nodes the parent image is sent first, then references, then the text prompt.
+
+`extraParentNodeIds` adds stored node images as ordered references before explicit
+`references`. Duplicate IDs and the base parent ID are removed; a missing requested
+extra image fails the request. Malformed IDs, per-reference size overflow, and the
+combined extra-plus-explicit reference cap are rejected before provider work.
+The existing configured reference limits apply, followed by provider-specific
+admission counting the base image too. `parent-only` does not load extra parents;
+existing provider-specific handling of explicit user references is unchanged.
+Graph connections preserve their saved order: the first image connection supplies
+the base and the remaining image connections supply references.
 
 Grok Node Mode uses the configured planner and Images API, with search suppressed by `searchMode: "off"` or `webSearchEnabled: false`. A parent node image, `externalSrc`, or extra references are passed to the planner and then to `/v1/images/edits`; otherwise the final call uses `/v1/images/generations`. The server caps total input images at three, counting parent/current image plus references, and returns `GROK_REF_TOO_MANY` before upstream when exceeded. Existing quality-model resolution is unchanged.
 
@@ -794,6 +805,25 @@ Node graph templates (higgsfield 120). Seed templates ship with the app and are 
 | `POST` | `/api/node-templates/:id/instantiate` | Return a graph copy with fresh node IDs (never auto-runs) |
 | `PATCH` | `/api/node-templates/:id` | Rename a user template (seed → `403`) |
 | `DELETE` | `/api/node-templates/:id` | Delete a user template (seed → `403`) |
+| `GET` | `/api/node-templates/:id/export` | Download a portable template file (seed or user) as `attachment; filename="<slug>.ima2-template.json"` |
+| `POST` | `/api/node-templates/import` | Create a user template from a portable file (`201 { template }`); never instantiates or runs |
+
+### Portable template files
+
+A file is `{ kind: "ima2.node-template", version: 1, exportedAt, sourceId?, name, description, tags, graph }`. `sourceId` is informational; imports always get a new id, and a taken name becomes `Name (2)`, `Name (3)`… within 80 characters.
+
+Both directions rebuild the graph from allowlists. Nodes keep only `id`, `type`, `position`, `width`, `height` and `data`; edges keep `id`, `source`, `target`, handles and `label`. `data` keeps prompt, provider, model, size, kind, node type, reasoning effort, variation, style, element name, video settings and unresolved media placeholders, with `status` reset to `idle`. Runtime ids, generated media URLs, filenames, secrets and any other key are dropped. Element nodes come back with `missing: true` because their asset ids only exist on the exporting machine.
+
+Import limits: 2 MB of request bytes (its own parser, ahead of the global body limit), the smaller of 300 nodes/1200 edges and the server's graph limits, 16 levels of nesting, names of 1-80 characters, descriptions up to 2000 characters, 20 tags of up to 40 characters. Structural problems are rejected rather than repaired. Errors use fixed messages and never echo file content:
+
+| Code | Status | Meaning |
+|---|---|---|
+| `TEMPLATE_FILE_INVALID` | 400 | Body is not JSON of the expected shape (including parser and charset errors) |
+| `TEMPLATE_FILE_KIND` | 400 | Not an `ima2.node-template` file |
+| `TEMPLATE_FILE_VERSION` | 400 | `version` is not exactly `1` |
+| `TEMPLATE_FILE_TOO_LARGE` | 413 | Over 2 MB, or too many nodes or edges |
+| `INVALID_TEMPLATE_NAME` | 400 | Empty or over 80 characters |
+| `INVALID_TEMPLATE_GRAPH` | 400 | No nodes, bad ids or positions, duplicate ids, dangling edges, cycles, forbidden keys (`__proto__`, `constructor`, `prototype`) or excess nesting |
 
 Graph save requests may include observability headers:
 
@@ -1004,7 +1034,7 @@ Most server routes under `/api/*` have a CLI wrapper. The exception is **Agent M
 | `POST /api/history/import-local` | `ima2 history import` |
 | `POST /api/metadata/read` | `ima2 metadata` / `ima2 show --metadata` |
 | `GET/POST/PUT/DELETE /api/sessions[/…]` | `ima2 session ls/show/create/rm/rename` |
-| `GET/PUT /api/sessions/:id/graph` | `ima2 session graph load/save` |
+| `GET /api/sessions/:id`, `PUT /api/sessions/:id/graph` | `ima2 session graph load/save` |
 | `GET/PUT /api/sessions/:id/style-sheet[/…]` | `ima2 session style-sheet …` |
 | `GET/PUT/DELETE /api/annotations/:name` | `ima2 annotate get/set/rm` |
 | `POST /api/canvas-versions` / `PUT /api/canvas-versions/:name` | `ima2 canvas-versions save/update` |
@@ -1038,6 +1068,8 @@ Most server routes under `/api/*` have a CLI wrapper. The exception is **Agent M
 Notes:
 - `ima2 history favorite` and `ima2 annotate …` send `X-Ima2-Browser-Id: cli-<sha1prefix>` derived from the config dir, so CLI activity does not collide with browser sessions.
 - `ima2 session graph save` performs a GET-then-PUT with `If-Match: "<version>"` to guard against `GRAPH_VERSION_CONFLICT`.
+- Graph CLI commands accept current flat session fields and legacy nested graph
+  responses. First save uses version 0; load exports `{ version, nodes, edges }`.
 - `ima2 history import` and `ima2 canvas-versions save/update` send raw bytes with `Content-Type: image/<png|jpeg|webp>`; the SSE endpoints (`multimode`, `node generate`, `video`) use `Accept: text/event-stream`. The web UI instead uses `GET /api/events` plus `async: true` on POST routes.
 - `ima2 cardnews …` checks `runtimeConfig.features.cardNews` before calling the gated endpoints; when disabled the CLI exits 2 with a clear message instead of producing a 404.
 
