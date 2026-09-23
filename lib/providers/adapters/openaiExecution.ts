@@ -39,6 +39,7 @@ function prepareOpenaiClassic(
           ctx,
           {
             model: imageModel, imageToolModel,
+            promptFiles: request.options.promptFiles,
             reasoningEffort,
             webSearchEnabled,
             signal: request.signal,

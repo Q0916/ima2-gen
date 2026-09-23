@@ -1,3 +1,4 @@
+import { promptFileInputs } from "../../promptFiles.js";
 import { compressReferenceB64ForOAuth } from "../../referenceImageCompress.js";
 import { detectImageMimeFromB64 } from "../../refs.js";
 import { type RouteRuntimeContext, requireRuntimeContext } from "../../runtimeContext.js";
@@ -60,8 +61,9 @@ export async function generateViaResponses(provider: string | undefined, prompt:
   const toolChoice = imageToolChoice(options.forceImageToolChoice ?? ctx.config?.oauth?.forceImageToolChoice !== false);
   const toolChoiceKind = imageToolChoiceKind(toolChoice);
   const referenceInputs = references.map(normalizeRef);
-  const userContent = referenceInputs.length
-    ? [...referenceInputs, { type: "input_text", text: buildUserTextPrompt(prompt, mode, { webSearchEnabled, size }) }]
+  const documentInputs = promptFileInputs(options.promptFiles);
+  const userContent = referenceInputs.length || documentInputs.length
+    ? [...referenceInputs, ...documentInputs, { type: "input_text", text: buildUserTextPrompt(prompt, mode, { webSearchEnabled, size }) }]
     : buildUserTextPrompt(prompt, mode, { webSearchEnabled, size });
   const result = await postResponses({
     ctx,
@@ -86,7 +88,7 @@ export async function generateViaResponses(provider: string | undefined, prompt:
   });
   const image = result.images[0];
   if (!image?.b64) {
-    if (options.allowPromptOnlyOAuthFallback === true) {
+    if (options.allowPromptOnlyOAuthFallback === true && !documentInputs.length) {
       const fallback = await retryPromptOnlyJsonImage({
         postResponses,
         ctx,

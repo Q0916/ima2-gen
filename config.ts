@@ -151,6 +151,9 @@ export const config = {
     bodyLimit: pickStr(env.IMA2_BODY_LIMIT, fileCfg.server?.bodyLimit, "50mb"),
   },
   limits: {
+    maxPromptFiles: pickInt(env.IMA2_MAX_PROMPT_FILES, fileCfg.limits?.maxPromptFiles, 8),
+    maxPromptFileBytes: pickInt(env.IMA2_MAX_PROMPT_FILE_BYTES, fileCfg.limits?.maxPromptFileBytes, 1024 * 1024),
+    maxPromptFilesTotalBytes: pickInt(env.IMA2_MAX_PROMPT_FILES_TOTAL_BYTES, fileCfg.limits?.maxPromptFilesTotalBytes, 4 * 1024 * 1024),
     maxRefB64Bytes: pickInt(env.IMA2_MAX_REF_B64_BYTES, fileCfg.limits?.maxRefB64Bytes, 7 * 1024 * 1024),
     maxMetadataReadB64Bytes: pickInt(
       env.IMA2_MAX_METADATA_READ_B64_BYTES,

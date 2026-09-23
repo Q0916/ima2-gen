@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 import { buildFilename, writeFileUnique } from "./filename.js";
 import type { Request, Response } from "express";
 import { detectImageMimeFromB64, summarizeReferencePayload, validateAndNormalizeRefs } from "./refs.js";
+import { validatePromptFiles, promptFileManifest } from "./promptFiles.js";
 import { generateImageThumbnailFromBuffer } from "./imageThumb.js";
 import { classifyUpstreamError } from "./errorClassify.js";
 import { appendGenerationRequestLog } from "./generationRequestLog.js";
@@ -139,6 +140,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
         reasoningEffort: rawReasoningEffort,
         webSearchEnabled: rawWebSearchEnabled = true,
       } = req.body;
+      const promptFiles = validatePromptFiles(req.body?.promptFiles);
       const promptError = validateGenerationPrompt(prompt);
       if (promptError) return fail(400, promptError);
 
@@ -187,6 +189,9 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       const effectiveSize = providerOptions.size;
       const webSearchEnabled = providerOptions.webSearchEnabled;
       const activeProvider = providerOptions.provider;
+      if (promptFiles.length && activeProvider !== "oauth" && activeProvider !== "api") {
+        return fail(400, { error: "Prompt files require oauth or api image generation.", code: "PROMPT_FILES_UNSUPPORTED" });
+      }
       // Resolved AFTER provider resolution on purpose: the raw request `provider`
       // defaults to "auto", so only `activeProvider` names the lane that will
       // actually run. Atlas Cloud talks to the gpt-image-2 API directly and
@@ -413,7 +418,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
         signal: cancelController.signal, prompt: generationPrompt, rawPrompt: prompt,
         references: refCheck.refDetails, providerUrl: incomingProviderUrl,
         options: { model: imageModel, imageToolModel, quality, size: effectiveSize, moderation,
-          mode: normalizedPromptMode, reasoningEffort, webSearchEnabled },
+          mode: normalizedPromptMode, reasoningEffort, webSearchEnabled, promptFiles },
         background: backgroundParams,
         backgroundConstraint: backgroundPreset ? backgroundPlannerConstraint(backgroundPreset) : undefined,
         nai: activeProvider === "nai" ? readNaiOptions(req.body) : {},
@@ -548,6 +553,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
             clientNodeId,
             prompt,
             userPrompt: prompt,
+            ...(promptFiles.length ? { promptFiles, promptFileManifest: promptFileManifest(promptFiles) } : {}),
             revisedPrompt: r.value.revisedPrompt || null,
             promptMode: normalizedPromptMode,
             composerPrompt,

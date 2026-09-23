@@ -1,7 +1,8 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { config } from "../config.js";
@@ -41,7 +42,7 @@ function imageEvents(): unknown[] {
   ];
 }
 
-async function withGenerateApp(fn: (baseUrl: string) => Promise<void>): Promise<void> {
+async function withGenerateApp(fn: (baseUrl: string, generatedDir: string) => Promise<void>): Promise<void> {
   const rootDir = await mkdtemp(join(tmpdir(), "ima2-classic-async-"));
   const generatedDir = join(rootDir, "generated");
   const app = express();
@@ -61,7 +62,7 @@ async function withGenerateApp(fn: (baseUrl: string) => Promise<void>): Promise<
   });
   const addr = server.address() as import("node:net").AddressInfo;
   try {
-    await fn(`http://127.0.0.1:${addr.port}`);
+    await fn(`http://127.0.0.1:${addr.port}`, generatedDir);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(rootDir, { recursive: true, force: true });
@@ -115,5 +116,44 @@ test("/api/generate async mode returns before upstream completion and publishes 
     assert.equal(done.provider, "api");
     assert.equal(typeof done.image, "string");
     assert.equal(done.filename && typeof done.filename === "string", true);
+  });
+});
+
+test("classic route forwards long Markdown and saves exact attachment provenance", async () => {
+  const bytes = Buffer.from("# Full prompt\r\n" + "보존할 원문과 이유\r\n".repeat(4000));
+  const doc = { filename: "prompt.md", data: bytes.toString("base64") };
+  let upstreamCalls = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith("http://127.0.0.1:")) return originalFetch(url, init);
+    upstreamCalls++;
+    const body = JSON.parse(String(init?.body));
+    const content = body.input.find((item: { role: string }) => item.role === "user").content;
+    assert.equal(content.find((item: { type: string }) => item.type === "input_file").file_data,
+      "data:text/markdown;base64," + doc.data);
+    return sseResponse(imageEvents());
+  };
+  await withGenerateApp(async (baseUrl, generatedDir) => {
+    const capabilities = await (await fetch(`${baseUrl}/api/prompt-files`)).json() as { transport: string };
+    assert.equal(capabilities.transport, "input_file");
+    for (const extra of [{ provider: "grok" }, { promptFiles: [{ ...doc, filename: "bad.png" }] }]) {
+      const rejected = await fetch(`${baseUrl}/api/generate`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Follow the document", provider: "api", promptFiles: [doc], ...extra }),
+      });
+      assert.equal(rejected.status, 400);
+    }
+    assert.equal(upstreamCalls, 0);
+    const res = await fetch(`${baseUrl}/api/generate`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Follow the document", provider: "api", promptFiles: [doc],
+        requestId: "classic_md_attachment", webSearchEnabled: false }),
+    });
+    assert.equal(res.status, 200);
+    const result = await res.json() as { filename: string };
+    const metadata = JSON.parse(await readFile(join(generatedDir, result.filename + ".json"), "utf8"));
+    assert.deepEqual(metadata.promptFiles, [doc]);
+    assert.equal(metadata.promptFileManifest[0].sha256, createHash("sha256").update(bytes).digest("hex"));
+    assert.equal(metadata.prompt, "Follow the document");
+    assert.equal(upstreamCalls, 1);
   });
 });

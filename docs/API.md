@@ -306,9 +306,21 @@ Sprite atlas imports require both a sprite-gen-compatible manifest and a PNG atl
 
 Import without a manifest returns `SPRITE_MANIFEST_REQUIRED`. GIF export returns `FFMPEG_UNAVAILABLE` with HTTP 503 when ffmpeg is unavailable.
 
+### `GET /api/prompt-files`
+
+Advertises native document attachment support: `transport: "input_file"`,
+`providers: ["oauth", "api"]`, `extensions: [".md", ".txt"]`, and byte/count
+limits. Clients must verify this before submitting files to an older server.
+
 ### `POST /api/generate`
 
 Text-to-image and reference-guided root generation.
+
+Optional `promptFiles: [{ "filename": "page.md", "data": "<base64 UTF-8 bytes>" }]`
+attaches documents as Responses `input_file` items on OAuth/API. `prompt` remains
+a short instruction; documents do not count toward its character limit. No server
+paths or URLs are accepted. Invalid files return `INVALID_PROMPT_FILE`; unsupported
+providers return `PROMPT_FILES_UNSUPPORTED`. See [limits and CLI usage](prompt-file-attachments.md).
 
 ```json
 {

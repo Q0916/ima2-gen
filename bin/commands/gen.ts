@@ -1,3 +1,4 @@
+import { loadPromptFiles, requirePromptFileSupport } from "../lib/prompt-files.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { config } from "../../config.js";
@@ -38,6 +39,7 @@ const SPEC = {
     "no-size-nudge": { type: "boolean" },
     count: { short: "n", type: "string", default: "1" },
     ref: { type: "string", repeatable: true },
+    "prompt-file": { type: "string", repeatable: true },
     out: { short: "o", type: "string" },
     "out-dir": { short: "d", type: "string" },
     json: { type: "boolean" }, "no-save": { type: "boolean" }, force: { type: "boolean" },
@@ -73,6 +75,7 @@ const HELP = `
     -d, --out-dir <dir>                     Output directory
         --json                              Print one JSON result to stdout
         --no-save                           Core lanes only
+        --prompt-file <file.md|file.txt>    Attach UTF-8 document; repeatable (oauth/api)
         --stdin                              Read prompt from stdin (core lanes only)
         --timeout <sec>                     Default: 180
         --server <url>                      Override server URL
@@ -307,11 +310,15 @@ function validateCoreFlags(args: ParsedArgs): void {
 }
 
 async function requestCoreImage(args: ParsedArgs, context: ImageContext, n: number, requestId: string) {
+  const paths = (Array.isArray(args["prompt-file"]) ? args["prompt-file"] : []) as string[];
+  const promptFiles = await loadPromptFiles(paths);
+  if (promptFiles.length) await requirePromptFileSupport(context.server.base);
   const references = await Promise.all(context.refs.map((path: string) => fileToDataUri(path)));
   const body: Record<string, unknown> = { prompt: context.prompt, quality: args.quality, size: args.size, n, references,
     ...(args["no-size-nudge"] ? { sizeNudge: false } : {}),
     model: context.target.model, mode: args.mode, moderation: args.moderation, sessionId: args.session,
     provider: context.target.lane, ...context.naiOptions };
+  if (promptFiles.length) body.promptFiles = promptFiles;
   body.requestId = requestId;
   if (args.bg) body.backgroundPreset = String(args.bg);
   if (args["image-tool-model"]) body.imageToolModel = args["image-tool-model"];
@@ -395,11 +402,16 @@ async function generate(argv: string[]): Promise<void> {
   if (args._unknown.length) die(2, `unknown option: ${args._unknown[0]}`);
   const naiPreflight = unwrapNaiCliResult(parseNaiCliOptions(args, "allow-unknown"), Boolean(args.json));
   let prompt = args.positional.join(" ");
+  const hasPromptFiles = Array.isArray(args["prompt-file"]) && args["prompt-file"].length > 0;
+  if (!prompt && !args.stdin && hasPromptFiles) prompt = "Generate the image following the attached prompt documents in order.";
   if (!prompt && !args.stdin) die(2, "prompt is required (positional or via --stdin)");
   const refs = (Array.isArray(args.ref) ? args.ref : []) as string[];
   if (refs.length > MAX_REFERENCE_COUNT) die(2, `max ${MAX_REFERENCE_COUNT} --ref attachments`);
   const { server, catalog } = await fetchCatalog(args.server, Boolean(args.json));
   const target = resolveImageTarget(args, catalog);
+  if (hasPromptFiles && (target.transport === "mcp" || !["oauth", "api"].includes(target.lane))) {
+    fail({ json: Boolean(args.json), code: "PROMPT_FILES_UNSUPPORTED", message: "--prompt-file requires oauth or api.", exitCode: 2 });
+  }
   const naiFinal = unwrapNaiCliResult(finalizeNaiCliTarget(naiPreflight, target), Boolean(args.json));
   if (args.character && target.transport !== "mcp") {
     fail({ json: Boolean(args.json), code: "CAPABILITY_MISMATCH",

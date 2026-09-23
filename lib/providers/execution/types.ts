@@ -12,6 +12,7 @@ export type ExecutionReference = Pick<
   CheckedRefs["refDetails"][number], "b64" | "declaredMime" | "detectedMime"
 >;
 export interface ExecutionOptions {
+  promptFiles?: import("../../promptFiles.js").PromptFile[];
   model: string;
   imageToolModel?: string | undefined;
   quality: string;
