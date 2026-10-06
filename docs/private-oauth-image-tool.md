@@ -6,6 +6,8 @@ Example: `ima2 gen --provider oauth --model gpt-6.1-sol --image-tool-model gpt-i
 
 Personal preset after building: `node scripts/ima2-personal.mjs gen --stdin ...`. For OAuth gen/edit it supplies GPT-6.1-Sol, Sunburst, high quality, and max reasoning unless explicitly overridden. Gen also defaults to direct mode. Other commands/providers pass through to the real CLI unchanged. It registers GPT-6.1-Sol only in its own process, matching the existing local generation-history bootstrap pattern.
 
+`node scripts/ima2-personal.mjs serve` starts the real `startServer()` in that same process so the local model registration is also available on the server. This follows the prior local generation bootstrap and uses existing file-backed OAuth login, without an interactive setup wizard.
+
 The reasoning model (`--model`) and image-tool model are separate request fields. The sidecar, embedded metadata, and history retain the **requested** image-tool model. They do not prove which backend actually rendered the image. Upstream errors are preserved; there is no silent fallback to a different image tool.
 
 OAuth server support is experimental and may change. This is a personal fork change pending official support, not an upstream release. Credentials and generation artifacts must remain local.
