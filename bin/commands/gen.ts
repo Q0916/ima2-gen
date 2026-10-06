@@ -82,7 +82,7 @@ const HELP = `
         --server <url>                      Override server URL
         --model <model|lane/model>          Bare IDs must be unique across lanes
                                             Core aliases: luna, astra, sol, terra, spark
-        --image-tool-model <id>             API only: gpt-image-2.5-sunburst|gpt-image-2.5-flare
+        --image-tool-model <id>             API / experimental OAuth: gpt-image-2.5-sunburst|gpt-image-2.5-flare
         --provider <${PROVIDER_VALUES.join("|")}>
                                             'auto' was removed; choose a lane explicitly
         --mode <auto|direct>                Core lanes only. Default: auto

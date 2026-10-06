@@ -25,18 +25,18 @@ if (executionTestProcess(import.meta.url)) describe("API image tool model contra
     { type: "response.completed", response: {} },
   ]);
 
-  for (const surface of SURFACES) for (const [index, imageToolModel] of MODELS.entries()) {
-    it(`${surface} serializes ${imageToolModel} without replacing the reasoning model`, async () => {
-      const quality = index === 0 ? "xhigh" : "max";
+  for (const provider of ["api", "oauth"]) for (const surface of SURFACES) for (const [index, imageToolModel] of MODELS.entries()) {
+    it(`${provider} ${surface} serializes ${imageToolModel} without replacing the reasoning model`, async () => {
+      const quality = provider === "oauth" ? "high" : index === 0 ? "xhigh" : "max";
       await harness.run(surface, { upstream: success }, async (f) => {
-        const response = await f.post({ ...BASE, provider: "api", imageToolModel, quality,
+        const response = await f.post({ ...BASE, provider, imageToolModel, quality,
           ...(surface === "edit" ? { image: source } : {}),
           ...(surface === "multimode" ? { async: true, maxImages: 1 } : {}) });
         assert.equal(response.status, surface === "multimode" ? 202 : 200);
         const result = surface === "multimode" ? (await f.waitTerminal()).data : await response.json();
         await f.waitSettled();
         assert.equal(f.calls.length, 1);
-        assert.equal(f.calls[0]!.url, "https://api.openai.com/v1/responses");
+        assert.ok(f.calls[0]!.url.endsWith("/responses"));
         const body = JSON.parse(f.calls[0]!.body);
         assert.equal(body.model, "gpt-5.4");
         assert.deepEqual(body.tools, [{ type: "image_generation", model: imageToolModel,
@@ -62,11 +62,11 @@ if (executionTestProcess(import.meta.url)) describe("API image tool model contra
     });
   }
 
-  for (const surface of SURFACES) {
-    it(`${surface} rejects invalid API image tool models before upstream`, async () => {
+  for (const provider of ["api", "oauth"]) for (const surface of SURFACES) {
+    it(`${surface} rejects invalid ${provider} image tool models before upstream`, async () => {
       await harness.run(surface, { upstream: () => { throw new Error("Unexpected upstream"); } }, async (f) => {
         for (const imageToolModel of ["gpt-image-2.5", "gpt-5.4", 25, {}]) {
-          const response = await f.post({ ...BASE, provider: "api", imageToolModel,
+          const response = await f.post({ ...BASE, provider, imageToolModel,
             ...(surface === "multimode" ? { async: true } : {}),
             ...(surface === "edit" ? { image: source } : {}) });
           assert.equal(response.status, 400);
@@ -82,8 +82,7 @@ if (executionTestProcess(import.meta.url)) describe("API image tool model contra
   for (const provider of ["api", "oauth"]) for (const quality of ["low", "medium", "high", "xhigh", "max"]) {
     it(`${provider} default tool preserves legacy quality scope: ${quality}`, async () => {
       await harness.run("classic", { upstream: success }, async (f) => {
-        const response = await f.post({ ...BASE, provider, quality,
-          ...(provider === "oauth" ? { imageToolModel: MODELS[0] } : {}) });
+        const response = await f.post({ ...BASE, provider, quality });
         assert.equal(response.status, 200);
         const result = await response.json();
         await f.waitSettled();
@@ -115,10 +114,22 @@ if (executionTestProcess(import.meta.url)) describe("API image tool model contra
     });
   });
 
-  it("non-API provider options ignore even stale invalid tool selections", async () => {
+  it("OAuth preserves upstream rejection without retrying another tool", async () => {
+    await harness.run("classic", { upstream: () => new Response(JSON.stringify({
+      error: { message: "Unsupported tool model", type: "invalid_request_error", param: "tools[0].model" },
+    }), { status: 400, headers: { "Content-Type": "application/json" } }) }, async (f) => {
+      const response = await f.post({ ...BASE, provider: "oauth", imageToolModel: MODELS[0] });
+      assert.equal(response.status, 400);
+      await f.waitSettled();
+      assert.equal(f.calls.length, 1);
+      assert.equal(JSON.parse(f.calls[0]!.body).tools[0].model, MODELS[0]);
+    });
+  });
+
+  it("unrelated provider options ignore even stale invalid tool selections", async () => {
     const { resolveProviderOptions } = await import("../lib/providerOptions.ts");
     const { normalizeOAuthParams } = await import("../lib/oauthNormalize.ts");
-    for (const provider of ["oauth", "grok", "grok-api", "agy", "gemini-api", "minimax", "nai", "atlascloud"]) {
+    for (const provider of ["grok", "grok-api", "agy", "gemini-api", "minimax", "nai", "atlascloud"]) {
       const options = resolveProviderOptions(null, { provider, rawImageToolModel: "stale-tool-model" });
       assert.equal(options.error, undefined);
       assert.equal(options.imageToolModel, undefined);

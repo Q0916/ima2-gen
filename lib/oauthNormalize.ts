@@ -1,5 +1,5 @@
 // 0.09.12.2 — Keep supported image tool qualities intact for OAuth.
-// OAuth keeps low/medium/high; only explicitly selected API 2.5 tools add qualities.
+// OAuth keeps low/medium/high; its explicit tool selection is experimental.
 // Keep the API response, UI metadata, and image_generation payload aligned.
 
 export const DEFAULT_IMAGE_QUALITY = "medium";
@@ -12,7 +12,7 @@ export function isApiImageToolModel(value: unknown): value is typeof API_IMAGE_T
 }
 
 export function normalizeImageToolModel(provider: string, value: unknown) {
-  if (provider !== "api" || value === undefined || value === null || value === "") {
+  if (!["api", "oauth"].includes(provider) || value === undefined || value === null || value === "") {
     return { imageToolModel: undefined };
   }
   if (isApiImageToolModel(value)) return { imageToolModel: value };
