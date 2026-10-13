@@ -308,6 +308,7 @@ interface ParseStreamOptions {
   requestId?: string | null | undefined;
   scope: string;
   maxImages?: number | undefined;
+  stopAfterImages?: boolean | undefined;
   onPartialImage?: ((partial: { b64: string | undefined; index: number | null | undefined }) => void) | null | undefined;
   onFinalImage?: FinalImageHandler | null | undefined;
 }
@@ -361,6 +362,7 @@ export async function parseStream(res: Response, {
   requestId,
   scope,
   maxImages = 1,
+  stopAfterImages = false,
   onPartialImage = null,
   onFinalImage = null,
 }: ParseStreamOptions): Promise<ParsedResponsesResult> {
@@ -426,6 +428,13 @@ export async function parseStream(res: Response, {
           state.eventCount,
           eventType,
         ), state);
+      }
+      if (stopAfterImages && state.images.length >= maxImages) {
+        state.finalBufferChars = buffer.length;
+        logEvent(scope, "image_target_reached", { requestId, imageCount: state.images.length, events: state.eventCount });
+        // A completed image must not depend on a later model turn or tool call.
+        void reader.cancel().catch(() => logEvent(scope, "stream_cancel_failed", { requestId }));
+        return resultFromState(state);
       }
     }
   }

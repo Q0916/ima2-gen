@@ -3,6 +3,7 @@ import type { FinalImageHandler } from "../../responsesParse.js";
 export type ReferenceRef = string | { b64?: string | undefined; detectedMime?: string | null; declaredMime?: string | null };
 
 export interface GenerateOptions {
+  stopAfterImages?: boolean | undefined;
   promptFiles?: import("../../promptFiles.js").PromptFile[] | undefined;
   webSearchEnabled?: boolean | undefined;
   searchMode?: string | undefined;

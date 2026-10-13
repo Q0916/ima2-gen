@@ -43,6 +43,7 @@ function prepareOpenaiClassic(
             reasoningEffort,
             webSearchEnabled,
             signal: request.signal,
+            stopAfterImages: true,
             allowPromptOnlyOAuthFallback: activeProvider !== "api" && !request.options.controlledExperiment,
             ...(backgroundParams ? { background: backgroundParams.background } : {}),
             ...(backgroundParams?.outputFormat ? { outputFormat: backgroundParams.outputFormat } : {}),

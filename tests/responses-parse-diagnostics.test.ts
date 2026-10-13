@@ -22,6 +22,52 @@ function rawSseResponse(body: string) {
   }), { status: 200, headers: { "Content-Type": "text/event-stream" } });
 }
 
+test("single-image completion keeps the first final result before a second-call overload", async () => {
+  const parsed = await parseStream(sseResponse([
+    { type: "response.output_item.done", item: { type: "image_generation_call", status: "completed", result: "final-image", revised_prompt: "actual scene" } },
+    { type: "response.output_item.added", item: { type: "image_generation_call", status: "in_progress" } },
+    { type: "error", error: { code: "server_is_overloaded" } },
+  ]), { scope: "test-single-image", maxImages: 1, stopAfterImages: true });
+  assert.deepEqual(parsed.images, [{ b64: "final-image", revisedPrompt: "actual scene" }]);
+  assert.equal(parsed.eventCount, 1);
+  assert.equal(parsed.diagnostics.imageCallCompleted, true);
+  assert.equal(parsed.usage, null); // Missing response-tail usage is not zero usage.
+});
+
+test("single-image completion closes an otherwise never-ending stream", { timeout: 1000 }, async () => {
+  let canceled = false;
+  const response = new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"response.output_item.done","item":{"type":"image_generation_call","status":"completed","result":"final"}}\n\n'));
+    },
+    cancel() { canceled = true; },
+  }));
+  const parsed = await parseStream(response, { scope: "test-single-stall", stopAfterImages: true });
+  assert.equal(parsed.images[0]?.b64, "final");
+  assert.equal(canceled, true);
+});
+
+test("partial preview followed by error never counts as a completed image", async () => {
+  await assert.rejects(() => parseStream(sseResponse([
+    { type: "response.image_generation_call.partial_image", partial_image_b64: "preview" },
+    { type: "error", error: { code: "server_is_overloaded" } },
+  ]), { scope: "test-partial-only", stopAfterImages: true }), (error: any) => {
+    assert.equal(error.upstreamCode, "server_is_overloaded");
+    assert.equal(error.responseDiagnostics.imageResultCount, 0);
+    return true;
+  });
+});
+
+test("sequence/default parsing still observes errors after an earlier image", async () => {
+  await assert.rejects(() => parseStream(sseResponse([
+    { type: "response.output_item.done", item: { type: "image_generation_call", result: "first" } },
+    { type: "error", error: { code: "server_error" } },
+  ]), { scope: "test-sequence-default", maxImages: 2 }), (error: any) => {
+    assert.equal(error.responseDiagnostics.imageResultCount, 1);
+    return true;
+  });
+});
+
 test("stream error preserves started image tool evidence without exposing prompt content", async () => {
   const res = sseResponse([
     { type: "response.output_item.added", item: { type: "image_generation_call", status: "in_progress", revised_prompt: "PRIVATE_PROMPT" } },

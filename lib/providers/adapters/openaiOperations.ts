@@ -75,6 +75,7 @@ export async function generateViaResponses(provider: string | undefined, prompt:
     scope: provider === "api" ? "api-generate" : "oauth",
     requestId,
     maxImages: 1,
+    stopAfterImages: options.stopAfterImages === true,
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
     ...(options.onPartialImage !== undefined ? { onPartialImage: options.onPartialImage } : {}),
     ...(options.onFinalImage !== undefined ? { onFinalImage: options.onFinalImage } : {}),

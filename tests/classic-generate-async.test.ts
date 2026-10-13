@@ -1,6 +1,7 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import sharp from "sharp";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -155,6 +156,35 @@ test("classic route forwards long Markdown and saves exact attachment provenance
     assert.equal(metadata.promptFileManifest[0].sha256, createHash("sha256").update(bytes).digest("hex"));
     assert.equal(metadata.prompt, "Follow the document");
     assert.equal(upstreamCalls, 1);
+  });
+});
+
+test("classic route saves a finished PNG when the following model tool call errors", async () => {
+  const png = await sharp({ create: { width: 2, height: 3, channels: 4, background: "blue" } }).png().toBuffer();
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith("http://127.0.0.1:")) return originalFetch(url, init);
+    calls++;
+    return sseResponse([
+      { type: "response.output_item.done", item: { type: "image_generation_call", status: "completed", result: png.toString("base64"), revised_prompt: "completed scene" } },
+      { type: "response.output_item.added", item: { type: "image_generation_call", status: "in_progress" } },
+      { type: "error", error: { code: "server_is_overloaded" } },
+    ]);
+  };
+  await withGenerateApp(async (baseUrl, generatedDir) => {
+    const response = await fetch(`${baseUrl}/api/generate`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "one image", provider: "api", requestId: "completed_before_overload", webSearchEnabled: false }),
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json() as { filename: string };
+    const saved = await readFile(join(generatedDir, result.filename));
+    assert.equal((await sharp(saved).metadata()).format, "png");
+    assert.deepEqual(await sharp(saved).raw().toBuffer(), await sharp(png).raw().toBuffer());
+    const metadata = JSON.parse(await readFile(join(generatedDir, result.filename + ".json"), "utf8"));
+    assert.equal(metadata.revisedPrompt, "completed scene");
+    assert.equal(calls, 1);
+    assert.equal(listTerminalJobs().find(job => job.requestId === "completed_before_overload")?.status, "completed");
   });
 });
 

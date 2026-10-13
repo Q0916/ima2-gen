@@ -131,12 +131,14 @@ if (executionTestProcess(import.meta.url)) describe("WP04 OpenAI real execution 
         else assert.deepEqual(body.input[1].content[0], { type: "input_image", image_url: `data:image/png;base64,${green}` });
         const image = surface === "multimode" ? f.events.find((e) => e.event === "image")!.data : result;
         assert.equal(image.image, `data:image/png;base64,${red}`);
-        assert.deepEqual(result.usage, { total_tokens: 19 }); assert.equal(result.webSearchCalls, 3);
+        // Classic completes on its first image; response-tail usage is unavailable.
+        assert.deepEqual(result.usage, surface === "classic" ? null : { total_tokens: 19 });
+        assert.equal(result.webSearchCalls, surface === "classic" ? 0 : 3);
         const saved = await meta(f, image.filename);
         for (const [field, expected] of Object.entries({ provider, model, prompt: BASE.prompt, userPrompt: BASE.prompt,
           revisedPrompt: "WP04 revised", requestId: f.requestId })) assert.equal(saved[field], expected, field);
         assert.equal(saved.kind, { classic: "classic", node: "generate", edit: "edit", multimode: "multimode-image" }[surface]);
-        assert.deepEqual(saved.usage, surface === "multimode" ? null : { total_tokens: 19 });
+        assert.deepEqual(saved.usage, surface === "multimode" || surface === "classic" ? null : { total_tokens: 19 });
         assert.equal((await readdir(f.generatedDir)).filter((file) => file.endsWith(".json")).length, 1);
       });
     });

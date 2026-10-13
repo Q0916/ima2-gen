@@ -43,5 +43,13 @@ text or image bytes. A tool-start event proves entry into the image tool, not
 successful completion; a successful PNG proves a working request, not reliability
 under a different concurrency level or visual correctness.
 
+Classic Responses image generation now completes on the first final image-tool
+result, then closes its response stream. A later model turn, second image call,
+overload error, or stalled tail cannot discard that completed image. Partial
+preview events do not count as completion. This applies to classic generation;
+multimode retains its sequence/stream behavior. Usage and assistant text emitted
+only after the image may be unavailable and must not be interpreted as zero
+usage. Closing the local stream does not prove remote GPU execution stopped.
+
 Validation: controlled-generation and controlled-execution tests, plus the classic
 async route regression, use fake providers. No real image generation is needed.

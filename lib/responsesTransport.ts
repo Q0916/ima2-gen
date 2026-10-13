@@ -145,6 +145,7 @@ export interface PostResponsesArgs {
   payload: unknown;
   requestId?: string | null | undefined;
   maxImages?: number | undefined;
+  stopAfterImages?: boolean | undefined;
   signal?: AbortSignal | null | undefined;
   onPartialImage?: ((partial: { b64: string | undefined; index: number | null | undefined }) => void) | null;
   onFinalImage?: FinalImageHandler | null | undefined;
@@ -171,6 +172,7 @@ export async function postResponses({
   payload,
   requestId,
   maxImages = 1,
+  stopAfterImages = false,
   signal = null,
   onPartialImage = null,
   onFinalImage = null,
@@ -211,9 +213,11 @@ export async function postResponses({
     }
     if (requestId) setJobPhase(requestId, "streaming");
     const contentType = res.headers.get("content-type") || "";
-    return contentType.includes("text/event-stream")
-      ? await parseStream(res, { requestId, scope, maxImages, onPartialImage, onFinalImage })
+    const parsed = contentType.includes("text/event-stream")
+      ? await parseStream(res, { requestId, scope, maxImages, stopAfterImages, onPartialImage, onFinalImage })
       : await parseJson(res, maxImages);
+    if (stopAfterImages && parsed.images.length >= maxImages) controller.abort();
+    return parsed;
   } catch (e) {
     const err = errInfo(e);
     const stream = err.raw as { eventCount?: number; eventTypes?: unknown; responseDiagnostics?: unknown } | undefined;

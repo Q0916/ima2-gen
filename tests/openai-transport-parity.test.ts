@@ -222,6 +222,22 @@ if (executionTestProcess(import.meta.url)) describe("WP04 real Responses transpo
     });
   });
 
+  it("classic single-image execution keeps a finished PNG before a later tool overload", async () => {
+    await direct(harness, () => responsesSse([
+      final(source),
+      { type: "response.output_item.added", item: { type: "image_generation_call", status: "in_progress" } },
+      { type: "error", error: { code: "server_is_overloaded" } },
+    ]), async (f) => {
+      const result = await f.track(execute(f, requestFor("classic", f.controller.signal, source)));
+      assert.equal(result.kind, "single");
+      if (result.kind !== "single") throw new Error("Expected single image");
+      assert.equal(result.value.b64, source);
+      assert.equal(result.value.revisedPrompt, "transport revised");
+      assert.equal(f.calls.length, 1, "completed image must not trigger a retry");
+      assert.equal(f.calls[0]!.signal?.aborted, true, "finished image closes the transport");
+    });
+  });
+
   for (const json of [false, true]) it(`O04-6 ${json ? "JSON retains duplicates without callbacks" : "SSE dedupes and invokes callbacks"}`, async () => {
     await direct(harness, (call) => {
       exactEndpoint(call);
