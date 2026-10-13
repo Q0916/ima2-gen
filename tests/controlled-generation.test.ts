@@ -90,3 +90,25 @@ test("24 controlled clients stay below the shared 600 per minute HTTP budget", a
   assert.ok(polls*24+120<600);
   assert.equal(now,60001);
 });
+
+test("pending work polls twice per minute and collects an early completion within 30 seconds", async () => {
+  let now = 0, posts = 0, deletes = 0;
+  const checks: number[] = [];
+  const completedAt = 152_400;
+  const result = await controlledGeneration("http://local", { ...body(), deadlineAt: 600_000 }, {
+    now: () => now, sleep: async (ms) => { now += ms; }, progress: () => {}, image: async () => "pixels",
+    call: async (_base, path, options) => {
+      if (path === "/api/experiment-control") return support;
+      if (path === "/api/generate") { posts++; return { requestId: body().requestId, experiment: support }; }
+      if (options?.method === "DELETE") { deletes++; return {}; }
+      checks.push(now);
+      return now < completedAt ? { jobs: [{ requestId: body().requestId }] }
+        : { terminalJobs: [{ requestId: body().requestId, status: "completed", meta: { filenames: ["bound.png"] } }] };
+    },
+  });
+  assert.equal(result.experimentState, "succeeded");
+  assert.equal(posts, 1); assert.equal(deletes, 0);
+  assert.equal(checks[0], 0);
+  assert.equal(checks.filter((time) => time < 60_000).length, 2);
+  assert.ok(now >= completedAt && now - completedAt <= 30_000);
+});

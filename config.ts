@@ -30,7 +30,7 @@ export const DEFAULT_GROK_PLANNER_MODEL = "grok-4.3";
 export const AGY_PROCESS_POLICY = Object.freeze({ timeoutMs: 360_000, terminateGraceMs: 1000, maxOutputBytes: 1_048_576 });
 export const AGY_ARTIFACT_POLICY = Object.freeze({ maxBytes: 52_428_800, chunkBytes: 65_536 });
 /** Avoid exhausting shared API admission when many controlled clients poll. */
-export const CONTROLLED_POLL_INTERVAL_MS = 5000;
+export const CONTROLLED_POLL_INTERVAL_MS = 30_000;
 /** Per-process API admission; streaming frames do not consume request slots. */
 export const API_REQUEST_POLICY = Object.freeze({
   windowMs: 60_000, requests: 600, mutations: 120, maxPeers: 4096,
