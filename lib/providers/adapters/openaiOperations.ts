@@ -1,4 +1,4 @@
-import { promptFileInputs, requirePromptFileMode, PROMPT_FILE_COMPOSITION_INSTRUCTION } from "../../promptFiles.js";
+import { promptFileInputs, requirePromptFileMode, PROMPT_FILE_COMPOSITION_INSTRUCTION, PROMPT_FILE_DIRECT_INSTRUCTION } from "../../promptFiles.js";
 import { compressReferenceB64ForOAuth } from "../../referenceImageCompress.js";
 import { detectImageMimeFromB64 } from "../../refs.js";
 import { type RouteRuntimeContext, requireRuntimeContext } from "../../runtimeContext.js";
@@ -63,8 +63,9 @@ export async function generateViaResponses(provider: string | undefined, prompt:
   const toolChoiceKind = imageToolChoiceKind(toolChoice);
   const referenceInputs = references.map(normalizeRef);
   const documentInputs = promptFileInputs(options.promptFiles);
+  const documentInstruction = mode === "direct" ? PROMPT_FILE_DIRECT_INSTRUCTION : PROMPT_FILE_COMPOSITION_INSTRUCTION;
   const userText = documentInputs.length
-    ? `${PROMPT_FILE_COMPOSITION_INSTRUCTION}\nRequested image size: ${size ?? "auto"}.\nCover message:\n${prompt ?? ""}`
+    ? `${documentInstruction}\nRequested image size: ${size ?? "auto"}.\nCover message:\n${prompt ?? ""}`
     : buildUserTextPrompt(prompt, mode, { webSearchEnabled, size });
   const userContent = referenceInputs.length || documentInputs.length
     ? [...referenceInputs, ...documentInputs, { type: "input_text", text: userText }]
@@ -83,7 +84,7 @@ export async function generateViaResponses(provider: string | undefined, prompt:
       model,
       input: [
         { role: "developer", content: (webSearchEnabled ? GENERATE_DEVELOPER_PROMPT : GENERATE_NO_SEARCH_DEVELOPER_PROMPT)
-          + (documentInputs.length ? `\n\n${PROMPT_FILE_COMPOSITION_INSTRUCTION}` : "") },
+          + (documentInputs.length ? `\n\n${documentInstruction}` : "") },
         { role: "user", content: userContent },
       ],
       tools: requestTools,

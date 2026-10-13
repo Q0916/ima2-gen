@@ -319,7 +319,7 @@ async function requestCoreImage(args: ParsedArgs, context: ImageContext, n: numb
   const paths = (Array.isArray(args["prompt-file"]) ? args["prompt-file"] : []) as string[];
   const promptFiles = await loadPromptFiles(paths);
   requirePromptFileMode(promptFiles, args.mode);
-  if (promptFiles.length) await requirePromptFileSupport(context.server.base);
+  if (promptFiles.length) await requirePromptFileSupport(context.server.base, String(args.mode));
   const references = await Promise.all(context.refs.map((path: string) => fileToDataUri(path)));
   const body: Record<string, unknown> = { prompt: context.prompt, quality: args.quality, size: args.size, n, references,
     ...(args["no-size-nudge"] ? { sizeNudge: false } : {}),

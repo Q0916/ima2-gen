@@ -3,13 +3,46 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validatePromptFiles, promptFileInputs, promptFileManifest } from "../lib/promptFiles.ts";
+import { validatePromptFiles, promptFileInputs, promptFileManifest, requirePromptFileMode } from "../lib/promptFiles.ts";
 import { loadPromptFiles, requirePromptFileSupport } from "../bin/lib/prompt-files.ts";
 import { generateViaResponses } from "../lib/responsesImageAdapter.ts";
 import { config } from "../config.js";
 
 const text = "# 한국어 콘티\r\n" + "손끝의 동작을 보존한다.\n".repeat(3000);
 const doc = { filename: "콘티.md", data: Buffer.from(text).toString("base64") };
+
+test("experimental direct retains native file and references, requests full copy, and needs explicit server capability", async () => {
+  const previous = process.env.IMA2_EXPERIMENTAL_PROMPT_FILE_DIRECT;
+  const fetch = globalThis.fetch;
+  process.env.IMA2_EXPERIMENTAL_PROMPT_FILE_DIRECT = "1";
+  try {
+    requirePromptFileMode([doc], "direct");
+    assert.throws(() => requirePromptFileMode([doc, doc], "direct"), { code: "PROMPT_FILE_DIRECT_SINGLE_DOCUMENT" });
+    globalThis.fetch = async () => Response.json({ transport: "input_file", modes: ["auto"] });
+    await assert.rejects(requirePromptFileSupport("http://127.0.0.1:1", "direct"), { code: "PROMPT_FILES_UNSUPPORTED" });
+    globalThis.fetch = async () => Response.json({ transport: "input_file", experimentalDirect: true });
+    await requirePromptFileSupport("http://127.0.0.1:1", "direct");
+    let calls = 0;
+    globalThis.fetch = async (_url, init) => {
+      calls++;
+      const body = JSON.parse(String(init?.body));
+      const user = body.input.find((x: { role: string }) => x.role === "user").content;
+      assert.equal(user.find((x: { type: string }) => x.type === "input_file").file_data, "data:text/markdown;base64," + doc.data);
+      assert.equal(user.filter((x: { type: string }) => x.type === "input_image").length, 1);
+      assert(!user.find((x: { type: string }) => x.type === "input_text").text.includes(text));
+      assert.match(body.input[0].content, /copy its entire text verbatim/);
+      assert.doesNotMatch(body.input[0].content, /Compose a self-contained image_generation prompt/);
+      return new Response('data: {"type":"response.completed","response":{"output":[]}}\n\n', { headers: { "Content-Type": "text/event-stream" } });
+    };
+    await assert.rejects(generateViaResponses("api", "tracking-id", "low", "1024x1536", "low", ["iVBORw0KGgo="], null, "direct",
+      { config, apiKey: "sk-test" }, { promptFiles: [doc], webSearchEnabled: false, allowPromptOnlyOAuthFallback: true }));
+    assert.equal(calls, 1, "no retry without the file");
+  } finally {
+    globalThis.fetch = fetch;
+    if (previous === undefined) delete process.env.IMA2_EXPERIMENTAL_PROMPT_FILE_DIRECT;
+    else process.env.IMA2_EXPERIMENTAL_PROMPT_FILE_DIRECT = previous;
+  }
+});
 
 test("Markdown attachments preserve >32K Korean text bytes independently of the short prompt", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ima2-md-"));

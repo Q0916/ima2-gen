@@ -1,5 +1,22 @@
 # Markdown prompt attachments
 
+## Scoped experiment: native attachment + direct (2026-10-14)
+
+Default attachment behavior remains `auto`. On this experimental branch only,
+`IMA2_EXPERIMENTAL_PROMPT_FILE_DIRECT=1` in both CLI and server processes allows
+one document with `--mode direct`. The capability endpoint must advertise
+`experimentalDirect: true`; older or ordinary servers fail before submission.
+Use an isolated task server, not a restart of the production server.
+
+The request retains native `input_file` bytes and image references. The intermediate
+model is instructed to copy the entire document verbatim into the image tool prompt,
+excluding cover/filename and transport instructions. This does not concatenate the
+document into the short body or guarantee deterministic transfer. Compare the full
+saved sidecar `revisedPrompt` with the source; a PNG or intact source hash alone is
+not a successful verbatim-transfer result. Do not auto-retry or switch to auto on
+failure. Removing the environment flag restores direct-attachment rejection.
+The default behavior and historical evidence below apply without this flag.
+
 `gen --prompt-file` attaches UTF-8 `.md` or `.txt` bytes as native Responses
 `input_file` content on the OAuth and API lanes. It does not concatenate the
 document into the short prompt, truncate it, or change the selected model.

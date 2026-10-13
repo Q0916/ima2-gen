@@ -26,10 +26,11 @@ export async function loadPromptFiles(paths: string[]): Promise<PromptFile[]> {
   return validatePromptFiles(files, limits);
 }
 
-export async function requirePromptFileSupport(base: string): Promise<void> {
+export async function requirePromptFileSupport(base: string, mode?: string): Promise<void> {
   try {
     const result = await request(base, "/api/prompt-files", { timeoutMs: 10000 });
     if (result?.transport !== "input_file") throw new Error("Unsupported server.");
+    if (mode === "direct" && result?.experimentalDirect !== true) throw new Error("Server has not enabled attachment direct.");
   } catch {
     throw Object.assign(new Error("This server does not advertise Markdown prompt attachments; update/start the matching server. No generation was submitted."),
       { code: "PROMPT_FILES_UNSUPPORTED", status: 400 });

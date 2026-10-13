@@ -4,12 +4,31 @@ import { config } from "../config.js";
 export interface PromptFile { filename: string; data: string }
 export interface PromptFileLimits { maxCount: number; maxFileBytes: number; maxTotalBytes: number }
 
+export function experimentalPromptFileDirectEnabled(): boolean {
+  return process.env.IMA2_EXPERIMENTAL_PROMPT_FILE_DIRECT === "1";
+}
+
 export function requirePromptFileMode(files: PromptFile[], mode: unknown): void {
-  if (files.length && mode === "direct") {
+  if (files.length && mode === "direct" && !experimentalPromptFileDirectEnabled()) {
     throw Object.assign(new Error("Prompt files require --mode auto: direct copies the cover text instead of composing the attached scene."),
       { code: "PROMPT_FILES_REQUIRE_AUTO", status: 400 });
   }
+  if (files.length > 1 && mode === "direct") {
+    throw Object.assign(new Error("Experimental attachment direct requires exactly one complete prompt document."),
+      { code: "PROMPT_FILE_DIRECT_SINGLE_DOCUMENT", status: 400 });
+  }
 }
+
+// This is a fidelity request, not a guaranteed byte-level image-tool transport.
+// Keep native input_file; do not decode the document into an inline request.
+export const PROMPT_FILE_DIRECT_INSTRUCTION =
+  "The single attached input_file contains the complete image_generation prompt. " +
+  "Read that document in full and copy its entire text verbatim into the image_generation prompt argument. " +
+  "Preserve its Korean text, punctuation, line breaks, sections, context and instructions in their original order. " +
+  "Do not summarize, translate, rewrite, select excerpts, add clarifiers, or replace any part with a pointer to the file. " +
+  "Do not use the cover message, filename, tracking ID, or these transport instructions as the image prompt. " +
+  "Pass the attached reference images to the image tool as references. Invoke image_generation exactly once. " +
+  "For this verbatim-transfer experiment, do not append general quality or anatomy descriptors.";
 
 export const PROMPT_FILE_COMPOSITION_INSTRUCTION =
   "Attached input_file documents contain the actual image request. Read them in full before calling image_generation. " +
