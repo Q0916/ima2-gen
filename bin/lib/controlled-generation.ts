@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { config } from "../../config.js";
+import { config, CONTROLLED_POLL_INTERVAL_MS } from "../../config.js";
 import { experimentDeadline, experimentFingerprint } from "../../lib/experimentControl.js";
 import { request } from "./client.js";
 
@@ -75,7 +75,7 @@ export async function controlledGeneration(base: string, body: Record<string, un
   while (d.now() < deadline) {
     try { const done = await inspect(timeout()); if (done) return done; }
     catch { lastState = "unknown"; }
-    await d.sleep(Math.max(0, Math.min(1000, deadline - d.now())));
+    await d.sleep(Math.max(0, Math.min(CONTROLLED_POLL_INTERVAL_MS, deadline - d.now())));
   }
   // Short cleanup window does not extend provider execution's server-side deadline.
   try {

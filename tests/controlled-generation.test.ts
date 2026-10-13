@@ -74,3 +74,19 @@ test("one shared absolute deadline cancels once; cancellation race preserves com
     assert.equal(result.experimentState, terminal === "completed" ? "succeeded" : terminal === "unreachable" ? "unknown" : "canceled");
   }
 });
+
+
+test("24 controlled clients stay below the shared 600 per minute HTTP budget", async () => {
+  let now=1, polls=0;
+  await controlledGeneration("http://local", {...body(), deadlineAt:60001}, {
+    now:()=>now, sleep:async(ms)=>{now+=ms;}, progress:()=>{},
+    call:async(_base,path,options)=>{
+      if(path==="/api/experiment-control") return support;
+      if(path==="/api/generate") return {requestId:body().requestId,experiment:support};
+      if(options?.method==="DELETE") return {};
+      polls++;return {jobs:[{requestId:body().requestId}]};
+    }
+  });
+  assert.ok(polls*24+120<600);
+  assert.equal(now,60001);
+});
