@@ -2,6 +2,8 @@ import { mkdir, readFile } from "fs/promises";
 import { safeWriteSidecar, atomicWriteJson } from "./atomicWrite.js";
 import { isAbsolute, join } from "path";
 import { randomBytes } from "crypto";
+import { experimentDeadline, experimentFingerprint, EXPERIMENT_CONTROL_VERSION } from "./experimentControl.js";
+import { abortJob } from "./inflight.js";
 import { buildFilename, writeFileUnique } from "./filename.js";
 import type { Request, Response } from "express";
 import { detectImageMimeFromB64, summarizeReferencePayload, validateAndNormalizeRefs } from "./refs.js";
@@ -55,6 +57,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
     let finishCanceled = false;
     let jobOwned = false;
     const cancelController = new AbortController();
+    let experimentTimer: ReturnType<typeof setTimeout> | undefined;
     const fail = (status: number, payload: Record<string, unknown>) => {
       finishStatus = "error";
       finishHttpStatus = status;
@@ -83,6 +86,8 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       res.json(payload);
     };
     try {
+      const deadlineAt = experimentDeadline(req.body ?? {});
+      const controlledExperiment = deadlineAt !== null;
       // Idempotency is resolved before any validation or provider work, so a
       // replay costs nothing and cannot start a second paid generation.
       try {
@@ -338,11 +343,20 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       if (admission) {
         return fail(admission.status, { error: admission.message, code: admission.code, requestId });
       }
+      const experiment = controlledExperiment ? {
+        version: EXPERIMENT_CONTROL_VERSION, deadlineAt, retries: 0, fallback: false,
+        effectiveInputSha256: experimentFingerprint({ provider: activeProvider,
+          prompt: generationPrompt, references: refCheck.refDetails, promptFiles,
+          model: imageModel, imageToolModel, quality, size: effectiveSize, moderation,
+          mode: normalizedPromptMode, reasoningEffort, webSearchEnabled }),
+      } : undefined;
       const started = startJob({
         requestId,
+        respectCanceledTombstone: controlledExperiment,
         kind: "classic",
         prompt,
         meta: {
+          ...(experiment ? { experiment } : {}),
           kind: "classic",
           sessionId,
           parentNodeId: null,
@@ -374,8 +388,12 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       }
       jobOwned = true;
       registerJobAbortController(requestId, cancelController);
+      if (deadlineAt !== null) {
+        if (Date.now() >= deadlineAt) { abortJob(requestId); throwIfJobCanceled(requestId); }
+        experimentTimer = setTimeout(() => abortJob(requestId), deadlineAt - Date.now());
+      }
       if (asyncMode) {
-        res.status(202).json({ requestId, async: true });
+        res.status(202).json({ requestId, async: true, ...(experiment ? { experiment } : {}) });
       }
       setJobPhase(requestId, "streaming");
       if (asyncMode) publish(requestId, "phase", { requestId, phase: "streaming" });
@@ -419,7 +437,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
         signal: cancelController.signal, prompt: generationPrompt, rawPrompt: prompt,
         references: refCheck.refDetails, providerUrl: incomingProviderUrl,
         options: { model: imageModel, imageToolModel, quality, size: effectiveSize, moderation,
-          mode: normalizedPromptMode, reasoningEffort, webSearchEnabled, promptFiles },
+          mode: normalizedPromptMode, reasoningEffort, webSearchEnabled, promptFiles, controlledExperiment },
         background: backgroundParams,
         backgroundConstraint: backgroundPreset ? backgroundPlannerConstraint(backgroundPreset) : undefined,
         nai: activeProvider === "nai" ? readNaiOptions(req.body) : {},
@@ -554,6 +572,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
             clientNodeId,
             prompt,
             userPrompt: prompt,
+            ...(experiment ? { experiment } : {}),
             ...(promptFiles.length ? { promptFiles, promptFileManifest: promptFileManifest(promptFiles) } : {}),
             revisedPrompt: r.value.revisedPrompt || null,
             promptMode: normalizedPromptMode,
@@ -716,6 +735,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
         requestId,
       });
     } finally {
+      if (experimentTimer) clearTimeout(experimentTimer);
       if (jobOwned) finishJob(requestId, {
         canceled: finishCanceled,
         status: finishStatus,

@@ -23,7 +23,7 @@ function prepareOpenaiClassic(
     mode: normalizedPromptMode, reasoningEffort, webSearchEnabled } = request.options;
   // Scalars are captured at prepare; references, signal and ctx stay live per attempt.
   const generateOne = async (): Promise<SingleImageExecutionResult> => {
-    const MAX_RETRIES = 1;
+    const MAX_RETRIES = request.options.controlledExperiment ? 0 : 1;
     let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -43,7 +43,7 @@ function prepareOpenaiClassic(
             reasoningEffort,
             webSearchEnabled,
             signal: request.signal,
-            allowPromptOnlyOAuthFallback: activeProvider !== "api",
+            allowPromptOnlyOAuthFallback: activeProvider !== "api" && !request.options.controlledExperiment,
             ...(backgroundParams ? { background: backgroundParams.background } : {}),
             ...(backgroundParams?.outputFormat ? { outputFormat: backgroundParams.outputFormat } : {}),
           },

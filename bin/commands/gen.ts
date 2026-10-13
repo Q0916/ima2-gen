@@ -1,4 +1,5 @@
 import { loadPromptFiles, requirePromptFileSupport } from "../lib/prompt-files.js";
+import { controlledGeneration } from "../lib/controlled-generation.js";
 import { requirePromptFileMode } from "../../lib/promptFiles.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -34,6 +35,9 @@ const PROVIDER_VALUES = [
 
 const SPEC = {
   flags: {
+    "controlled-experiment": { type: "boolean" },
+    "deadline-at": { type: "string" },
+    "request-id": { type: "string" },
     "image-tool-model": { type: "string" },
     quality: { short: "q", type: "string", default: "low" },
     size: { short: "s", type: "string", default: "1024x1024" },
@@ -66,6 +70,7 @@ const HELP = `
     'ima2 cancel <requestId>'. MCP lanes support -n 1 only.
 
   Options:
+        --controlled-experiment --deadline-at <epoch-ms>  Async, one attempt, no fallback; shared batch deadline
     -q, --quality <low|medium|high|xhigh|max>         Core lanes only. Default: low
     -s, --size <WxH | auto>                 Core lanes only. Default: 1024x1024
         --no-size-nudge                     Do not restate --size in the prompt
@@ -327,6 +332,10 @@ async function requestCoreImage(args: ParsedArgs, context: ImageContext, n: numb
   if (args["reasoning-effort"]) body.reasoningEffort = args["reasoning-effort"];
   if (args["no-web-search"]) body.webSearchEnabled = false;
   else if (args["web-search"]) body.webSearchEnabled = true;
+  if (args["controlled-experiment"]) {
+    return controlledGeneration(context.server.base, { ...body, async: true, controlledExperiment: true,
+      deadlineAt: Number(args["deadline-at"]) });
+  }
   return request(context.server.base, "/api/generate", { method: "POST", body,
     timeoutMs: (parseInt(String(args.timeout)) || 180) * 1000, headers: { "X-Request-Id": requestId } });
 }
@@ -344,15 +353,23 @@ async function recoverCoreTimeout(args: ParsedArgs, context: ImageContext, reque
 async function runCoreImage(args: ParsedArgs, context: ImageContext): Promise<void> {
   validateCoreFlags(args);
   const n = Math.max(1, Math.min(MAX_GENERATION_COUNT, parseInt(String(args.count)) || 1));
-  const requestId = createCliRequestId("req_cli_gen");
+  if ((args["deadline-at"] || args["request-id"]) && !args["controlled-experiment"]) die(2, "experiment flags require --controlled-experiment");
+  if (args["controlled-experiment"] && (n !== 1 || args["no-save"])) die(2, "controlled experiments require n=1 and saved output");
+  const requestId = args["request-id"] ? String(args["request-id"]) : createCliRequestId("req_cli_gen");
   let response;
   try { response = await requestCoreImage(args, context, n, requestId); }
   catch (error) {
     const info = errInfo(error);
     const timedOut = info.name === "TimeoutError" || info.name === "AbortError";
-    if (timedOut && await recoverCoreTimeout(args, context, requestId, n)) return;
+    if (!args["controlled-experiment"] && timedOut && await recoverCoreTimeout(args, context, requestId, n)) return;
     if (args.json) json({ ok: false, error: info.message, code: info.code, status: info.status, requestId });
     dieWithError(error);
+  }
+  if (response.experimentState && response.experimentState !== "succeeded") {
+    if (args.json) json({ ok: false, ...response });
+    else out(`${response.experimentState}: ${requestId} ${response.code ?? ""}`);
+    process.exitCode = 1;
+    return;
   }
   const norm = normalizeGenerate(response);
   if (norm.images.length === 0) die(1, "server returned no images");
@@ -376,6 +393,7 @@ async function runCoreImage(args: ParsedArgs, context: ImageContext): Promise<vo
   }
   const measured = await Promise.all(paths.map((path) => measureSaved(path)));
   if (args.json) json({ ok: true, requestId: norm.requestId, elapsed: norm.elapsed,
+    ...(response.experiment ? { experiment: response.experiment, experimentState: "succeeded" } : {}),
     images: paths.map((path, index) => ({
       path,
       filename: norm.images[index]?.filename,
@@ -411,6 +429,7 @@ async function generate(argv: string[]): Promise<void> {
   if (refs.length > MAX_REFERENCE_COUNT) die(2, `max ${MAX_REFERENCE_COUNT} --ref attachments`);
   const { server, catalog } = await fetchCatalog(args.server, Boolean(args.json));
   const target = resolveImageTarget(args, catalog);
+  if (args["controlled-experiment"] && !["oauth", "api"].includes(target.lane)) die(2, "controlled experiments require oauth or api");
   if (hasPromptFiles && (target.transport === "mcp" || !["oauth", "api"].includes(target.lane))) {
     fail({ json: Boolean(args.json), code: "PROMPT_FILES_UNSUPPORTED", message: "--prompt-file requires oauth or api.", exitCode: 2 });
   }

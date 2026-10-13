@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { config } from "../config.js";
 import { registerGenerateRoutes } from "../routes/generate.ts";
 import { subscribe, _resetForTest as resetEventBus } from "../lib/eventBus.js";
-import { _resetForTests as resetInflight } from "../lib/inflight.js";
+import { _resetForTests as resetInflight, listTerminalJobs } from "../lib/inflight.js";
 
 const FINAL_B64 = Buffer.from("classic async image").toString("base64");
 
@@ -156,4 +156,42 @@ test("classic route forwards long Markdown and saves exact attachment provenance
     assert.equal(metadata.prompt, "Follow the document");
     assert.equal(upstreamCalls, 1);
   });
+});
+
+test("controlled route enforces no retry and cancels upstream at its absolute deadline", async () => {
+  for (const behavior of ["error", "hang"] as const) {
+    let calls = 0, aborted = false;
+    globalThis.fetch = async (url, init) => {
+      if (String(url).startsWith("http://127.0.0.1:")) return originalFetch(url, init);
+      calls++;
+      if (behavior === "error") return new Response("fake upstream failure", { status: 500 });
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => { aborted = true; reject(new DOMException("aborted", "AbortError")); });
+      });
+    };
+    await withGenerateApp(async (baseUrl) => {
+      const requestId = `controlled-${behavior}`;
+      const finished = new Promise<void>((resolve) => {
+        const unsubscribe = subscribe((ev) => {
+          if (ev.jobId === requestId && ev.event === "error") { unsubscribe(); resolve(); }
+        });
+      });
+      const capabilities = await (await fetch(`${baseUrl}/api/experiment-control`)).json() as { version: number };
+      assert.equal(capabilities.version, 1);
+      const res = await fetch(`${baseUrl}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, prompt: "test only", provider: "api", model: "gpt-5.6-luna",
+          imageToolModel: "gpt-image-2.5-sunburst", mode: "direct", webSearchEnabled: false,
+          n: 1, async: true, controlledExperiment: true, deadlineAt: Date.now() + 200 }),
+      });
+      const accepted = await res.json() as { experiment: { effectiveInputSha256: string } };
+      assert.equal(res.status, 202, JSON.stringify(accepted));
+      assert.match(accepted.experiment.effectiveInputSha256, /^[a-f0-9]{64}$/);
+      await finished;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(calls, 1);
+      const terminal = listTerminalJobs().find((j) => j.requestId === requestId);
+      assert.equal(terminal?.status, behavior === "hang" ? "canceled" : "error");
+      if (behavior === "hang") assert.equal(aborted, true);
+    });
+  }
 });
