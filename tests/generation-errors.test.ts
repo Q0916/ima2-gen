@@ -7,6 +7,16 @@ import {
   statusForErrorCode,
 } from "../lib/generationErrors.ts";
 
+test("Responses timeout retains its code and partial stream evidence", () => {
+  const original = { code: "RESPONSES_IMAGE_TIMEOUT", status: 504, message: "timed out",
+    eventCount: 4, eventTypes: { "response.output_item.added": 1 }, responseDiagnostics: { imageCallSeen: true } };
+  const normalized = normalizeGenerationFailure(original);
+  assert.equal(normalized.code, original.code);
+  assert.equal(normalized.status, 504);
+  assert.equal(normalized.eventCount, 4);
+  assert.deepEqual(normalized.responseDiagnostics, original.responseDiagnostics);
+});
+
 test("missing direct Grok image key is a non-retryable 401 passthrough", () => {
   const err = Object.assign(new Error("Grok API key is required for grok-api image generation"), {
     code: "GROK_API_KEY_MISSING", status: 401,

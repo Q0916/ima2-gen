@@ -62,6 +62,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       finishStatus = "error";
       finishHttpStatus = status;
       finishErrorCode = typeof payload.code === "string" ? payload.code : finishErrorCode;
+      finishMeta = { ...finishMeta, failure: payload };
       // The human-readable reason for the request log (260819): producers put
       // it in payload.error, MCP-shaped payloads in payload.message.
       finishErrorMessage = typeof payload.error === "string" ? payload.error

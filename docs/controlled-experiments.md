@@ -24,5 +24,24 @@ Acknowledgement, terminal metadata and image sidecars retain the effective input
 fingerprint; the CLI also records the submitted body fingerprint. Ordinary requests
 retain their existing behavior. Provider-internal randomness/routing is outside this control.
 
+## Failure diagnosis and time limits
+
+The shared experiment deadline and the OAuth provider's per-call timeout are
+separate limits; whichever expires first stops the request. OAuth defaults to
+400000 ms. Setting a 600000 ms experiment deadline does not raise that limit.
+For a dedicated ten-minute diagnostic server, set
+`IMA2_OAUTH_GENERATION_TIMEOUT_MS=590000` in that server process before startup.
+Keep the absolute batch deadline and record both values with the experiment.
+Do not infer an upstream outage or access denial from a locally generated 504.
+
+Terminal failures retain the structured `failure` payload, which the controlled
+CLI returns alongside `code` and `error`. `RESPONSES_IMAGE_TIMEOUT` identifies a
+local provider-call timeout. Stream failures retain event counts and sanitized
+output-item summaries, including whether an image tool call started before the
+stream failed. These diagnostics contain types, statuses and lengths, not prompt
+text or image bytes. A tool-start event proves entry into the image tool, not
+successful completion; a successful PNG proves a working request, not reliability
+under a different concurrency level or visual correctness.
+
 Validation: controlled-generation and controlled-execution tests, plus the classic
 async route regression, use fake providers. No real image generation is needed.

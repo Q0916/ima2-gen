@@ -59,7 +59,10 @@ export async function controlledGeneration(base: string, body: Record<string, un
     const terminal = snapshot.terminalJobs?.find((j: { requestId: string }) => j.requestId === requestId);
     if (terminal?.meta?.experiment?.version === 1) Object.assign(experiment, terminal.meta.experiment);
     if (terminal?.status === "canceled") return result("canceled", { code: terminal.errorCode });
-    if (terminal?.status === "error") return result("failed", { code: terminal.errorCode });
+    if (terminal?.status === "error") return result("failed", {
+      code: terminal.errorCode, error: terminal.meta?.failure?.error,
+      failure: terminal.meta?.failure,
+    });
     if (terminal?.status === "completed") {
       const filenames = terminal.meta?.filenames ?? (terminal.meta?.filename ? [terminal.meta.filename] : []);
       if (filenames.length !== 1) return result("unknown", { code: "OUTPUT_IDENTITY_MISSING" });

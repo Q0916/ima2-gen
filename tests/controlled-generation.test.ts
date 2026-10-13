@@ -8,6 +8,20 @@ const body = () => ({ requestId: "test-controlled", controlledExperiment: true, 
   webSearchEnabled: false, deadlineAt: 4000, prompt: "same prompt", references: ["same ref"] });
 const support = { version: 1, retries: 0, fallback: false };
 
+test("controlled CLI retains terminal failure details rather than dropping upstream diagnostics", async () => {
+  const failure = { error: "stream error", code: "RESPONSES_STREAM_ERROR", upstreamCode: "server_error", errorEventCount: 3 };
+  const result = await controlledGeneration("http://local", body(), {
+    now: () => 1, progress: () => {},
+    call: async (_base, path) => {
+      if (path === "/api/experiment-control") return support;
+      if (path === "/api/generate") return { requestId: body().requestId, experiment: support };
+      return { terminalJobs: [{ requestId: body().requestId, status: "error", errorCode: failure.code, meta: { failure } }] };
+    },
+  });
+  assert.equal(result.error, failure.error);
+  assert.deepEqual((result as unknown as { failure: unknown }).failure, failure);
+});
+
 test("control validation rejects implicit conditions, stale deadlines, and unsupported lanes", () => {
   assert.equal(experimentDeadline({}, 1), null);
   assert.equal(experimentDeadline(body(), 1), 4000);

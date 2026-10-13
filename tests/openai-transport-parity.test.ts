@@ -82,7 +82,7 @@ export async function runLayeredAbortCase(harness: RouteHarness, layer: string, 
       assert.ok(layer === "classic" || layer === "node" || layer === "edit" || layer === "multimode");
       work = f.track(execute(f, requestFor(layer, f.controller.signal, source)));
     }
-    const expectedCode = layer === "classic" ? (callerAbort ? "INVALID_REQUEST" : "UNKNOWN")
+    const expectedCode = layer === "classic" ? (callerAbort ? "INVALID_REQUEST" : "RESPONSES_IMAGE_TIMEOUT")
       : (callerAbort ? "GENERATION_CANCELED" : "RESPONSES_IMAGE_TIMEOUT");
     const rejected = assert.rejects(work, (error: Error & { code?: string; status?: number; cause?: unknown }) => {
       assert.equal(error.code, expectedCode); assert.equal(error.status, callerAbort ? 499 : 504);

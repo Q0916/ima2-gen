@@ -346,6 +346,17 @@ async function appendFinalImageFromItem(
   }
 }
 
+function streamFailure(error: unknown, state: ParseState): Error {
+  const failure = error instanceof Error ? error : new Error("Response stream failed");
+  return Object.assign(failure, { eventCount: state.eventCount, eventTypes: state.eventTypes,
+    responseDiagnostics: diagnosticsFromState(state) });
+}
+
+async function readStreamChunk(reader: ReadableStreamDefaultReader<Uint8Array>, state: ParseState) {
+  try { return await reader.read(); }
+  catch (error) { throw streamFailure(error, state); }
+}
+
 export async function parseStream(res: Response, {
   requestId,
   scope,
@@ -358,7 +369,7 @@ export async function parseStream(res: Response, {
   const state = createState();
   let buffer = "";
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readStreamChunk(reader, state);
     if (done) break;
     state.chunkCount++;
     state.bytesRead += value.byteLength;
@@ -388,7 +399,12 @@ export async function parseStream(res: Response, {
       if (finalText) state.messageOutputSeen = true;
       const partial = extractPartialImage(data);
       if (partial && typeof onPartialImage === "function") onPartialImage(partial);
-      if (data.type === "response.output_item.done") recordOutputItem(state, data.type, data.item);
+      if (data.type === "response.output_item.added" || data.type === "response.output_item.done") {
+        recordOutputItem(state, data.type, data.item);
+        if (data.item?.type === "image_generation_call" && data.type === "response.output_item.added") {
+          logEvent(scope, "image_tool_started", { requestId, events: state.eventCount });
+        }
+      }
       if (data.type === "response.output_item.done" && data.item?.type === "image_generation_call") {
         await appendFinalImageFromItem(state, data.item, maxImages, requestId, onFinalImage);
       }
@@ -404,12 +420,12 @@ export async function parseStream(res: Response, {
         if (typeof wsNum === "number" && wsNum > state.webSearchCalls) state.webSearchCalls = wsNum;
       }
       if (data.type === "error") {
-        throw makeStreamError(
+        throw streamFailure(makeStreamError(
           "Responses stream returned an error",
           safeDiagnosticLabel(data.error?.code, "RESPONSES_STREAM_ERROR") || "RESPONSES_STREAM_ERROR",
           state.eventCount,
           eventType,
-        );
+        ), state);
       }
     }
   }

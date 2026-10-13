@@ -12,6 +12,7 @@ const PASSTHROUGH_CODES = new Set([
   "AUTH_API_KEY_INVALID",
   "UPSTREAM_5XX",
   "OAUTH_IMAGE_TIMEOUT",
+  "RESPONSES_IMAGE_TIMEOUT",
   "API_KEY_REQUIRED",
   "INVALID_REQUEST",
   "OAUTH_UPSTREAM_ERROR",
@@ -188,6 +189,7 @@ export function normalizeGenerationFailure(lastErr: UpstreamErr | null | undefin
     if (lastErr?.upstreamParam) err.upstreamParam = safeDiagnosticLabel(lastErr.upstreamParam);
     if (lastErr?.eventType) err.eventType = lastErr.eventType;
     if (typeof lastErr?.eventCount === "number") err.eventCount = lastErr.eventCount;
+    copyEmptyResponseMetadata(err, lastErr);
     return decorateProviderFailure(err, lastErr);
   }
   if (SAFETY_CODES.has(code)) {

@@ -191,6 +191,11 @@ test("controlled route enforces no retry and cancels upstream at its absolute de
       assert.equal(calls, 1);
       const terminal = listTerminalJobs().find((j) => j.requestId === requestId);
       assert.equal(terminal?.status, behavior === "hang" ? "canceled" : "error");
+      if (behavior === "error") {
+        const failure = terminal?.meta?.failure as { code?: string; error?: string };
+        assert.equal(typeof failure?.code, "string");
+        assert.equal(typeof failure?.error, "string");
+      }
       if (behavior === "hang") assert.equal(aborted, true);
     });
   }

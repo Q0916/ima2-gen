@@ -22,6 +22,35 @@ function rawSseResponse(body: string) {
   }), { status: 200, headers: { "Content-Type": "text/event-stream" } });
 }
 
+test("stream error preserves started image tool evidence without exposing prompt content", async () => {
+  const res = sseResponse([
+    { type: "response.output_item.added", item: { type: "image_generation_call", status: "in_progress", revised_prompt: "PRIVATE_PROMPT" } },
+    { type: "error", error: { code: "server_error" } },
+  ]);
+  await assert.rejects(() => parseStream(res, { scope: "test-stream-failure" }), (error: any) => {
+    assert.equal(error.upstreamCode, "server_error");
+    assert.equal(error.eventCount, 2);
+    assert.equal(error.responseDiagnostics.imageCallSeen, true);
+    assert.equal(error.responseDiagnostics.imageCallCompleted, false);
+    assert.equal(JSON.stringify(error.responseDiagnostics).includes("PRIVATE_PROMPT"), false);
+    return true;
+  });
+});
+
+test("aborted read preserves events received before timeout", async () => {
+  let reads = 0;
+  const res = new Response(new ReadableStream({ pull(controller) {
+    if (reads++ === 0) controller.enqueue(new TextEncoder().encode('data: {"type":"response.output_item.added","item":{"type":"image_generation_call","status":"in_progress"}}\n\n'));
+    else controller.error(new DOMException("timed out", "AbortError"));
+  } }));
+  await assert.rejects(() => parseStream(res, { scope: "test-aborted-read" }), (error: any) => {
+    assert.equal(error.name, "AbortError");
+    assert.equal(error.eventCount, 1);
+    assert.equal(error.responseDiagnostics.imageCallSeen, true);
+    return true;
+  });
+});
+
 test("Responses stream parser records sanitized no-image diagnostics", async () => {
   const res = sseResponse([
     { type: "response.output_item.done", item: { type: "web_search_call", status: "completed" } },

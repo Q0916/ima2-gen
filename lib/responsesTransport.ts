@@ -216,6 +216,7 @@ export async function postResponses({
       : await parseJson(res, maxImages);
   } catch (e) {
     const err = errInfo(e);
+    const stream = err.raw as { eventCount?: number; eventTypes?: unknown; responseDiagnostics?: unknown } | undefined;
     if (err.name === "AbortError") {
       if (signal?.aborted) {
         throw makeError("Generation canceled", {
@@ -224,7 +225,8 @@ export async function postResponses({
           cause: err.raw,
         });
       }
-      throw makeError("Responses image generation timed out", { status: 504, code: "RESPONSES_IMAGE_TIMEOUT", cause: err.raw });
+      throw makeError("Responses image generation timed out", { status: 504, code: "RESPONSES_IMAGE_TIMEOUT", cause: err.raw,
+        eventCount: stream?.eventCount, eventTypes: stream?.eventTypes, responseDiagnostics: stream?.responseDiagnostics });
     }
     if (isKnownResponsesError(err.raw)) throw err.raw;
     throw makeError("Responses request failed before receiving a response", {
